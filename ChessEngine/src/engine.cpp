@@ -48,11 +48,6 @@ void Engine::Render()
 	system("clear");
 #endif
 
-	if (invalidMove)
-	{
-		std::cout << "Invalid move! Please try again.\n\n";
-		invalidMove = false; // Reset invalid move status
-	}
 	std::cout << "Current Player..." << (currentPlayer == Color::WHITE ? "White" : "Black") << "\n";
 	std::cout << "FEN.............." << this->GetFEN() << "\n"; // Placeholder function
 	std::cout << "Check............" << ((checkStatus == Color::NONE) ? "None" : (checkStatus == Color::WHITE) ? "White" : "Black");
@@ -69,7 +64,26 @@ void Engine::Render()
 		std::cout << (8 - i); // Row number
 	}
 	std::cout << "\n+---+---+---+---+---+---+---+---+\n";
-	std::cout << "  a   b   c   d   e   f   g   h\n";
+	std::cout << "  a   b   c   d   e   f   g   h\n\n";
+
+	if (invalidMove)
+	{
+		std::cout << "Invalid move! Please try again.\n";
+		invalidMove = false; // Reset invalid move status
+	}
+}
+
+void Engine::RunTurn()
+{
+	do
+	{
+		this->Render();
+		this->StoreMove();
+		this->ProcessMove();
+	} while (invalidMove);
+
+	this->ChangePlayers();
+
 }
 
 void Engine::StoreMove()
@@ -78,7 +92,7 @@ void Engine::StoreMove()
 	std::cin >> notationMove;
 }
 
-bool Engine::ProcessMove()
+void Engine::ProcessMove()
 {
 	if (notationMove == "O-O-O")
 	{
@@ -94,7 +108,7 @@ bool Engine::ProcessMove()
 		notationMove[3] < '1' || notationMove[3] > '8')
 	{
 		this->invalidMove = true;
-		return false;
+		return;
 	}
 	else
 	{
@@ -103,12 +117,33 @@ bool Engine::ProcessMove()
 		int endColumn = notationMove[2] - 'a'; // Convert 'a'-'h' to 0-7
 		int endRow = 8 - (notationMove[3] - '0'); // Convert '1'-'8' to 7-0
 
+
+		Piece movingPiece = this->board[startRow][startColumn].GetPiece();
+		// Check valid move conditions
+		// Don't need out of bounds because 'i'-'z' and '9' aren't valid
+		if (movingPiece == Pieces::NONE || movingPiece.GetColor() != currentPlayer)
+		{
+			this->invalidMove = true;
+			return;
+		}
+		if (this->board[endRow][endColumn].GetPiece().GetColor() == currentPlayer)
+		{
+			this->invalidMove = true; // Cannot capture own piece
+			return;
+		}
+		if (!movingPiece.ValidMove(startRow, startColumn, endRow, endColumn, board))
+		{
+			this->invalidMove = true; // Invalid move for the piece
+			return;
+		}
+
 		this->board[endRow][endColumn].SetPiece(this->board[startRow][startColumn].GetPiece());
 		this->board[startRow][startColumn].SetPiece(Pieces::NONE); // Clear the starting square
 
-		return true;
+		return;
 	}
-	return false;
+
+	invalidMove = true;
 }
 
 const char* Engine::GetFEN() const

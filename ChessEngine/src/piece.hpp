@@ -16,11 +16,17 @@ enum class Pieces {
 	NONE
 };
 
+struct Square;
+
 struct Piece {
+	Piece(Pieces t = Pieces::NONE, Color c = Color::NONE);
+	// Overloader to return type when used in an expression
+	operator Pieces() const;
+	void Render() const;
+	bool ValidMove(int startRow, int startCol, int endRow, int endCol, Square board[8][8]);
+
+	Color GetColor() const;
+
 	Pieces type;
 	Color color;
-	Piece(Pieces t = Pieces::NONE, Color c = Color::WHITE) : type(t), color(c) {}
-	// Overloader to return type when used in an expression
-	operator Pieces() const { return type; }
-	void Render() const;
 };

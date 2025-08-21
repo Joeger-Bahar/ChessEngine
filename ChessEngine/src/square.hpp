@@ -1,6 +1,6 @@
 #pragma once  
 
-#include "piece.hpp"  
+#include "piece.hpp"
 
 struct Square  
 {
@@ -8,10 +8,10 @@ struct Square
    Piece piece;
 
 
-   Square(Color c = Color::WHITE, Piece p = Pieces::NONE) : color(c), piece(p) {}
-   Piece GetPiece() const { return piece; }
-   void SetPiece(Piece p) { piece = p; }
-   Color GetColor() const { return color; }
-   void SetColor(Color c) { color = c; }
-   bool IsEmpty() const { return piece == ::Pieces::NONE; }
+   Square(Color c = Color::WHITE, Piece p = Pieces::NONE);
+   Piece GetPiece() const;
+   void SetPiece(Piece p);
+   Color GetColor() const;
+   void SetColor(Color c);
+   bool IsEmpty() const;
 };

@@ -12,13 +12,14 @@ public:
 	Engine();
 	~Engine();
 
-	void Render();
-	void StoreMove();
-	bool ProcessMove();
-	inline void ChangePlayers() { currentPlayer = (currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
+	void RunTurn();
 
 private:
+	void Render();
+	void StoreMove();
+	void ProcessMove();
 	const char* GetFEN() const;
+	inline void ChangePlayers() { currentPlayer = (currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
 
 	Square board[8][8];
 	std::string notationMove;

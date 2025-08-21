@@ -6,13 +6,7 @@ int main()
 	Engine chessEngine;
 	while (1)
 	{
-		do
-		{
-			chessEngine.Render();				// Clears screen as well
-			chessEngine.StoreMove();			// Stores internally
-		} while (!chessEngine.ProcessMove());	// Uses stored move. Returns true if move was valid
-
-		chessEngine.ChangePlayers();
+		chessEngine.RunTurn();	// Does everything for 1 turn
 	}
 	return 0;
 }
