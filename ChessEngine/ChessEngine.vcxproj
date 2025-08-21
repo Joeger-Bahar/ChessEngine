@@ -127,6 +127,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\engine.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\move.cpp" />
     <ClCompile Include="src\piece.cpp" />

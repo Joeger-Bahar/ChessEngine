@@ -4,4 +4,8 @@
 
 #include "piece.hpp"
 
-struct Move;
+struct Move
+{
+	uint8_t fromX, fromY;
+	uint8_t toX, toY;
+};
