@@ -28,4 +28,6 @@ private:
 	Color checkStatus = Color::NONE; // NONE, WHITE, BLACK
 	bool checkmate = false; // Can use check status for color
 	bool invalidMove = false; // If the last move was invalid
+	bool queenSideCastling = true; // If queenside castling is available
+	bool kingSideCastling =  true;  // If kingside castling is available
 };

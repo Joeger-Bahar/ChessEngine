@@ -23,7 +23,8 @@ struct Piece {
 	// Overloader to return type when used in an expression
 	operator Pieces() const;
 	void Render() const;
-	bool ValidMove(int startRow, int startCol, int endRow, int endCol, Square board[8][8]);
+	// End numbers are references to change if pieces are in the way
+	bool ValidMove(int startRow, int startCol, int& endRow, int& endCol, Square board[8][8]);
 
 	Color GetColor() const;
 

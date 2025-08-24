@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <cstdlib> // For console clearing
+#include <Windows.h>
 
 Engine::Engine()
 {
@@ -94,14 +95,48 @@ void Engine::StoreMove()
 
 void Engine::ProcessMove()
 {
-	if (notationMove == "O-O-O")
+	// TODO: If king or rook has moved in the game, cannot castle
+	if (notationMove == "O-O-O" || notationMove == "O-O") // Castling
 	{
-		// Queen-side castling
+		bool kingside = (notationMove == "O-O");
+		int row = (currentPlayer == Color::WHITE) ? 7 : 0; // Row 7 for white, 0 for black
+		int rookColumn = (kingside) ? 7 : 0;
+		int kingColumn = 4; // Only used to avoid '4' as a pseudo magic number
+		// +1 or -1, used for stepping to check missing pieces and to move rook and king to correct space
+		int step = (kingside) ? 1 : -1; // -1 for queenside (down the columns), 1 for kingside
+
+		// King or rook not in starting position					// Color of piece
+		if (board[row][kingColumn].GetPiece() != Piece(Pieces::KING, currentPlayer) ||
+		    board[row][rookColumn].GetPiece() != Piece(Pieces::ROOK, currentPlayer))
+		{
+			this->invalidMove = true;
+			return;
+		}
+		// Squares between king and rook not empty
+		// Only need to check 2 squares for kingside castling (f1/f8 and g1/g8)
+		int squaresToCheck = kingside ? 2 : 3;
+		for (int offset = 1; offset <= squaresToCheck; offset++)
+		{
+			if (!board[row][kingColumn + (step * offset)].IsEmpty())
+			{
+				this->invalidMove = true;
+				return;
+			}
+		}
+
+		// Perform castling
+		// Move king to c1/c8 or g1/g8 (two up or down from the kings original position)
+		board[row][kingColumn + (step * 2)].SetPiece(board[row][kingColumn].GetPiece());
+		board[row][kingColumn].SetPiece(Piece(Pieces::NONE, Color::NONE)); // Clear original king square
+
+		// Move rook to d1/d8 or f1/f8 (one up or down from the kings original position)
+		board[row][kingColumn + step].SetPiece(board[row][rookColumn].GetPiece());
+		board[row][rookColumn].SetPiece(Piece(Pieces::NONE, Color::NONE)); // Clear original rook square
+
+		return; // Successfully castled
 	}
-	else if (notationMove == "O-O")
-	{
-		// King-side castling
-	}
+
+	// Outside bounds or invalid notation
 	else if (notationMove.length() != 4 || notationMove[0] < 'a' || notationMove[0] > 'h' ||
 		notationMove[1] < '1' || notationMove[1] > '8' ||
 		notationMove[2] < 'a' || notationMove[2] > 'h' ||
@@ -110,20 +145,20 @@ void Engine::ProcessMove()
 		this->invalidMove = true;
 		return;
 	}
-	else
+
+	else // Convert notation to board indices and validate the move
 	{
 		int startColumn = notationMove[0] - 'a'; // Convert 'a'-'h' to 0-7
 		int startRow = 8 - (notationMove[1] - '0'); // Convert '1'-'8' to 7-0
 		int endColumn = notationMove[2] - 'a'; // Convert 'a'-'h' to 0-7
 		int endRow = 8 - (notationMove[3] - '0'); // Convert '1'-'8' to 7-0
 
-
 		Piece movingPiece = this->board[startRow][startColumn].GetPiece();
 		// Check valid move conditions
 		// Don't need out of bounds because 'i'-'z' and '9' aren't valid
 		if (movingPiece == Pieces::NONE || movingPiece.GetColor() != currentPlayer)
 		{
-			this->invalidMove = true;
+			this->invalidMove = true; // No piece at the starting square or wrong color
 			return;
 		}
 		if (this->board[endRow][endColumn].GetPiece().GetColor() == currentPlayer)
