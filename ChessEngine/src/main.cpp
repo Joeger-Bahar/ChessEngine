@@ -1,6 +1,11 @@
 #include <iostream>
 #include "engine.hpp"
 
+// TODO: List of attacked squares
+// TODO: Checks and checkmate
+// TODO: En passant
+// TODO: GUI
+// TODO: Promotion
 int main()
 {
 	Engine chessEngine;

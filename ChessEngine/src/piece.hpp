@@ -1,5 +1,7 @@
 #pragma once
 
+#include "move.hpp"
+
 enum class Color {
 	WHITE,
 	BLACK,
@@ -24,7 +26,7 @@ struct Piece {
 	operator Pieces() const;
 	void Render() const;
 	// End numbers are references to change if pieces are in the way
-	bool ValidMove(int startRow, int startCol, int& endRow, int& endCol, Square board[8][8]);
+	//bool ValidMove(Move& move, Square board[8][8]);
 
 	Color GetColor() const;
 
