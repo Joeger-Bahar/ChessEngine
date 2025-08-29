@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <string>
+#include <chrono>
+#include <Windows.h>
 
 #include "piece.hpp"
 #include "square.hpp"
@@ -20,8 +22,16 @@ private:
 	void StoreMove();
 	void ProcessMove();
 	bool ValidMove(const Piece piece);
+	std::vector<uint8_t> GetAttackedSquares(Color color); // Returns a list of squares (0-63) attacked by the given color
 	std::string GetFEN() const;
+	void UndoMove();
 	inline void ChangePlayers() { currentPlayer = (currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
+	void Benchmark();
+	// These were generated with AI (Chat-GPT 5)
+	void AddKnightAttacks(int row, int col, std::array<bool, 64>& attacked);
+	void AddSlidingAttacks(int row, int col, std::array<bool, 64>& attacked, const std::vector<std::pair<int, int>>& dirs);
+	void AddPawnAttacks(int row, int col, Color color, std::array<bool, 64>& attacked);
+	void AddKingAttacks(int row, int col, std::array<bool, 64>& attacked);
 
 	std::vector<Move> moveHistory;
 	Square board[8][8];
@@ -30,7 +40,7 @@ private:
 	Color currentPlayer = Color::WHITE;
 	Color checkStatus = Color::NONE; // NONE, WHITE, BLACK
 	int enPassantTarget[2] = { -1, -1 }; // { row, column }, -1 if no target
-	bool checkmate = false; // Can use check status for color
+	bool checkmate = false, draw = false; // Can use check status for color
 	bool invalidMove = false; // If the last move was invalid
 	bool whiteCastlingRights[2] = { true, true }; // { queenside, kingside }
 	bool blackCastlingRights[2] = { true, true }; // { queenside, kingside }

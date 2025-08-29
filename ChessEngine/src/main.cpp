@@ -1,9 +1,9 @@
-#include <iostream>
 #include "engine.hpp"
+#include "graphics/graphicsEngine.hpp"
 
-// TODO: List of attacked squares
+
+// TODO: List of attacked squares (untested)
 // TODO: Checks and checkmate
-// TODO: En passant
 // TODO: GUI
 // TODO: Promotion
 int main()

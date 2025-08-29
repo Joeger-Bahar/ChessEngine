@@ -1,8 +1,10 @@
 ﻿#include "engine.hpp"
 
 #include <iostream>
+#include <sstream>
 #include <cstdlib> // For console clearing
 #include <cmath>
+#include <array>
 
 Engine::Engine()
 {
@@ -49,29 +51,34 @@ void Engine::Render()
 	system("clear");
 #endif
 
-	std::cout << "Current Player..." << (currentPlayer == Color::WHITE ? "White" : "Black") << "\n";
-	std::cout << "FEN.............." << this->GetFEN() << "\n"; // Placeholder function
-	std::cout << "Check............" << ((checkStatus == Color::NONE) ? "None" : (checkStatus == Color::WHITE) ? "White" : "Black");
-	std::cout << "\nCheckmate........" << ((!checkmate) ? "No" : (checkStatus == Color::WHITE) ? "Yes (White)" : "Yes (Black)") << "\n";
+	// Use stringstream to build the output for efficiency (console slow)
+	std::ostringstream output;
+
+	output << "Current Player..." << (currentPlayer == Color::WHITE ? "White" : "Black") << '\n';
+	output << "FEN.............." << this->GetFEN() << '\n';
+	output << "In Check........." << ((checkStatus == Color::NONE) ? "None" : (checkStatus == Color::WHITE) ? "Black" : "White");
+	output << "\nCheckmate........" << ((!checkmate) ? "No" : (checkStatus == Color::WHITE) ? "Yes (White)" : "Yes (Black)") << '\n';
 
 
 	for (int i = 0; i < 8; ++i)
 	{
-		std::cout << "\n+---+---+---+---+---+---+---+---+\n| ";
+		output << "\n+---+---+---+---+---+---+---+---+\n| ";
 		for (int j = 0; j < 8; ++j)
 		{
-			board[i][j].GetPiece().Render();
+			output << board[i][j].GetPiece().Render();
 		}
-		std::cout << (8 - i); // Row number
+		output << (8 - i); // Row number
 	}
-	std::cout << "\n+---+---+---+---+---+---+---+---+\n";
-	std::cout << "  a   b   c   d   e   f   g   h\n\n";
+	output << "\n+---+---+---+---+---+---+---+---+\n";
+	output << "  a   b   c   d   e   f   g   h\n\n";
 
 	if (invalidMove)
 	{
-		std::cout << "Invalid move! Please try again.\n";
+		output << "Invalid move! Please try again.\n";
 		invalidMove = false; // Reset invalid move status
 	}
+
+	std::cout << output.str();
 }
 
 void Engine::RunTurn()
@@ -84,7 +91,23 @@ void Engine::RunTurn()
 	} while (invalidMove);
 
 	this->ChangePlayers();
+	this->Benchmark();
+	Sleep(2000);
 
+}
+
+void Engine::Benchmark()
+{
+	constexpr int iterations = 1'000'000;
+
+	auto start = std::chrono::high_resolution_clock::now();
+	for (int i = 0; i < iterations; ++i) {
+		auto result = GetAttackedSquares(Color::WHITE);
+	}
+	auto end = std::chrono::high_resolution_clock::now();
+
+	auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+	std::cout << "Time per call: " << (ns / iterations) << " ns\n";
 }
 
 void Engine::StoreMove()
@@ -95,6 +118,24 @@ void Engine::StoreMove()
 
 void Engine::ProcessMove()
 {
+	// Special commands
+	if (notationMove == "resign")
+	{
+		checkmate = true;
+		checkStatus = (currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; // Opponent wins
+		return;
+	}
+	else if (notationMove == "draw")
+	{
+		checkmate = false;
+		checkStatus = Color::NONE; // Draw
+		return;
+	}
+	else if (notationMove == "undo")
+	{
+		UndoMove();
+		return;
+	}
 	// TODO: If king or rook has moved in the game, cannot castle
 	if (notationMove == "O-O-O" || notationMove == "O-O") // Castling
 	{
@@ -246,6 +287,7 @@ void Engine::ProcessMove()
 			enPassantTarget[1] = -1;
 		}
 
+		move.capturedPiece = targetPiece;
 		// Move piece
 		board[move.endRow][move.endCol].SetPiece(movingPiece);
 		board[move.startRow][move.startCol].SetPiece(Pieces::NONE); // Clear the starting square
@@ -261,9 +303,6 @@ void Engine::ProcessMove()
 
 bool Engine::ValidMove(const Piece piece)
 {
-	// Need to check if theres pieces in the way for bishop, rook, and queen
-	// Return false if conditions aren't met, and break if they are, so only bishop rook and queen get to the end of the function
-	// Then have the in the way code in 1 place so it isn't repeated
 	switch (piece)
 	{
 	case Pieces::PAWN: // Complete
@@ -325,8 +364,8 @@ bool Engine::ValidMove(const Piece piece)
 check_pieces_in_way:
 	for (int i = 1; i < 8; ++i) // 7 loops because chess board has 8 squares
 	{
-		int rowChange = (move.endRow - move.startRow) / std::max(1, abs(move.endRow - move.startRow)); // Normalize row difference to 1 or -1 (up or down)
-		int colChange = (move.endCol - move.startCol) / std::max(1, abs(move.endCol - move.startCol)); // Normalize column difference to 1 or -1 (left or right)
+		int rowChange = (move.endRow - move.startRow) / max(1, abs(move.endRow - move.startRow)); // Normalize row difference to 1 or -1 (up or down)
+		int colChange = (move.endCol - move.startCol) / max(1, abs(move.endCol - move.startCol)); // Normalize column difference to 1 or -1 (left or right)
 		int currentRow = move.startRow + i * rowChange; // Starts at move.startRow and moves towards move.endRow
 		int currentCol = move.startCol + i * colChange; // Starts at move.startCol and moves towards move.endCol
 
@@ -353,6 +392,106 @@ check_pieces_in_way:
 			return true;
 		}
 	}
+}
+
+//std::vector<uint8_t> Engine::GetAttackedSquares(Color color)
+//{
+//	std::vector<uint8_t> attackedSquares;
+//	for (int i = 0; i < 8; ++i)
+//	{
+//		for (int j = 0; j < 8; ++j)
+//		{
+//			Piece piece = board[i][j].GetPiece();
+//			if (piece == Pieces::NONE || piece.GetColor() != color) continue; // Skip empty squares and pieces of the wrong color
+//
+//			// For each piece of the given color, check all squares on the board
+//			for (int r = 0; r < 8; ++r)
+//			{
+//				for (int c = 0; c < 8; ++c)
+//				{
+//					if (i == r && j == c) continue; // Skip the piece's own square
+//					Move testMove;
+//					testMove.startRow = i;
+//					testMove.startCol = j;
+//					testMove.endRow = r;
+//					testMove.endCol = c;
+//					// Temporarily set the move to test if it's valid
+//					move = testMove;
+//					if (ValidMove(piece))
+//					{
+//						uint8_t squareIndex = r * 8 + c; // Convert (row, col) to single index (0-63)
+//						if (std::find(attackedSquares.begin(), attackedSquares.end(), squareIndex) == attackedSquares.end())
+//						{
+//							attackedSquares.push_back(squareIndex); // Add if not already in the list
+//						}
+//					}
+//				}
+//			}
+//		}
+//	}
+//
+//	return attackedSquares;
+//}
+
+// This looks messy and annoying, and it takes up a lot of space, but it's about 5x faster
+// than a brute force (above)
+std::vector<uint8_t> Engine::GetAttackedSquares(Color color)
+{
+	// Rook directions (up, down, left, right)
+	const std::vector<std::pair<int, int>> rookDirs = {
+		{-1, 0}, {1, 0}, {0, -1}, {0, 1}
+	};
+
+	// Bishop directions (diagonals)
+	const std::vector<std::pair<int, int>> bishopDirs = {
+		{-1, -1}, {-1, 1}, {1, -1}, {1, 1}
+	};
+
+	// Queen = rook + bishop
+	const std::vector<std::pair<int, int>> queenDirs = {
+		{-1, 0}, {1, 0}, {0, -1}, {0, 1},
+		{-1, -1}, {-1, 1}, {1, -1}, {1, 1}
+	};
+
+	// Attacked can be used as a bitboard for attacked squares
+	std::array<bool, 64> attacked = { false };
+
+	for (int i = 0; i < 8; ++i)
+	{
+		for (int j = 0; j < 8; ++j)
+		{
+			Piece piece = board[i][j].GetPiece();
+			if (piece == Pieces::NONE || piece.GetColor() != color) continue;
+
+			switch (piece)
+			{
+			case Pieces::PAWN:
+				AddPawnAttacks(i, j, color, attacked);
+				break;
+			case Pieces::KNIGHT:
+				AddKnightAttacks(i, j, attacked);
+				break;
+			case Pieces::BISHOP:
+				AddSlidingAttacks(i, j, attacked, bishopDirs);
+				break;
+			case Pieces::ROOK:
+				AddSlidingAttacks(i, j, attacked, rookDirs);
+				break;
+			case Pieces::QUEEN:
+				AddSlidingAttacks(i, j, attacked, queenDirs);
+				break;
+			case Pieces::KING:
+				AddKingAttacks(i, j, attacked);
+				break;
+			}
+		}
+	}
+
+	std::vector<uint8_t> attackedSquares;
+	for (int idx = 0; idx < 64; ++idx)
+		if (attacked[idx]) attackedSquares.push_back(idx);
+
+	return attackedSquares;
 }
 
 std::string Engine::GetFEN() const
@@ -425,4 +564,74 @@ std::string Engine::GetFEN() const
 	fen += std::to_string(moveHistory.size() / 2 + 1); // Fullmove number
 
 	return fen;
+}
+
+void Engine::UndoMove()
+{
+	if (moveHistory.empty())
+	{
+		this->invalidMove = true; // No moves to undo
+		return;
+	}
+	// Undo last move
+	move = moveHistory.back();
+	moveHistory.pop_back();
+	Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
+	board[move.startRow][move.startCol].SetPiece(movingPiece);
+	board[move.endRow][move.endCol].SetPiece(move.capturedPiece); // Restore captured piece, if any
+	// Don't need to change players because this counts as a "turn"
+}
+
+void Engine::AddKnightAttacks(int row, int col, std::array<bool, 64>& attacked)
+{
+	static const int dr[8] = { -2, -2, -1, -1, 1, 1, 2, 2 };
+	static const int dc[8] = { -1, 1, -2, 2, -2, 2, -1, 1 };
+
+	for (int k = 0; k < 8; ++k) {
+		int nr = row + dr[k], nc = col + dc[k];
+		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8) 
+			attacked[nr * 8 + nc] = true;
+	}
+}
+
+void Engine::AddSlidingAttacks(int row, int col, std::array<bool, 64>& attacked, const std::vector<std::pair<int, int>>& dirs)
+{
+	for (const auto &[dr, dc] : dirs) {
+		int nr = row + dr, nc = col + dc;
+		while (0 <= nr && nr < 8 && 0 <= nc && nc < 8) {
+			attacked[nr * 8 + nc] = true;
+			if (board[nr][nc].GetPiece() != Pieces::NONE) break; // Blocked
+			nr += dr; nc += dc;
+		}
+	}
+}
+
+void Engine::AddPawnAttacks(int row, int col, Color color, std::array<bool, 64>& attacked)
+{
+	int dir = (color == Color::WHITE) ? -1 : 1;  // White pawns move "up" (row decreases), black "down" (row increases)
+
+	// Two attack directions: left diagonal and right diagonal
+	for (int dc : {-1, 1})
+	{
+		int nr = row + dir;
+		int nc = col + dc;
+
+		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8)
+			attacked[nr * 8 + nc] = true;
+	}
+}
+
+void Engine::AddKingAttacks(int row, int col, std::array<bool, 64>& attacked)
+{
+	static const int dr[8] = { -1, -1, -1, 0, 0, 1, 1, 1 };
+	static const int dc[8] = { -1, 0, 1, -1, 1, -1, 0, 1 };
+
+	for (int k = 0; k < 8; ++k)
+	{
+		int nr = row + dr[k];
+		int nc = col + dc[k];
+
+		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8)
+			attacked[nr * 8 + nc] = true;
+	}
 }
