@@ -11,7 +11,7 @@ int main()
 	Engine chessEngine;
 	while (1)
 	{
-		chessEngine.RunTurn();	// Does everything for 1 turn
+		chessEngine.Update();
 	}
 	return 0;
 }

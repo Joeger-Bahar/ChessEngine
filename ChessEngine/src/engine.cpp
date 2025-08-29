@@ -44,76 +44,81 @@ Engine::~Engine()
 
 void Engine::Render()
 {
-	// Clear the console (platform-specific)
-#ifdef _WIN32
-	system("cls");
-#else
-	system("clear");
-#endif
+//	// Clear the console (platform-specific)
+//#ifdef _WIN32
+//	system("cls");
+//#else
+//	system("clear");
+//#endif
+//
+//	// Use stringstream to build the output for efficiency (console slow)
+//	std::ostringstream output;
+//
+//	output << "Current Player..." << (currentPlayer == Color::WHITE ? "White" : "Black") << '\n';
+//	output << "FEN.............." << this->GetFEN() << '\n';
+//	output << "In Check........." << ((checkStatus == Color::NONE) ? "None" : (checkStatus == Color::WHITE) ? "Black" : "White");
+//	output << "\nCheckmate........" << ((!checkmate) ? "No" : (checkStatus == Color::WHITE) ? "Yes (White)" : "Yes (Black)") << '\n';
+//
+//
+//	for (int i = 0; i < 8; ++i)
+//	{
+//		output << "\n+---+---+---+---+---+---+---+---+\n| ";
+//		for (int j = 0; j < 8; ++j)
+//		{
+//			output << board[i][j].GetPiece().Render();
+//		}
+//		output << (8 - i); // Row number
+//	}
+//	output << "\n+---+---+---+---+---+---+---+---+\n";
+//	output << "  a   b   c   d   e   f   g   h\n\n";
+//
+//	if (invalidMove)
+//	{
+//		output << "Invalid move! Please try again.\n";
+//		invalidMove = false; // Reset invalid move status
+//	}
+//
+//	std::cout << output.str();
 
-	// Use stringstream to build the output for efficiency (console slow)
-	std::ostringstream output;
-
-	output << "Current Player..." << (currentPlayer == Color::WHITE ? "White" : "Black") << '\n';
-	output << "FEN.............." << this->GetFEN() << '\n';
-	output << "In Check........." << ((checkStatus == Color::NONE) ? "None" : (checkStatus == Color::WHITE) ? "Black" : "White");
-	output << "\nCheckmate........" << ((!checkmate) ? "No" : (checkStatus == Color::WHITE) ? "Yes (White)" : "Yes (Black)") << '\n';
-
-
-	for (int i = 0; i < 8; ++i)
-	{
-		output << "\n+---+---+---+---+---+---+---+---+\n| ";
-		for (int j = 0; j < 8; ++j)
-		{
-			output << board[i][j].GetPiece().Render();
-		}
-		output << (8 - i); // Row number
-	}
-	output << "\n+---+---+---+---+---+---+---+---+\n";
-	output << "  a   b   c   d   e   f   g   h\n\n";
-
-	if (invalidMove)
-	{
-		output << "Invalid move! Please try again.\n";
-		invalidMove = false; // Reset invalid move status
-	}
-
-	std::cout << output.str();
+	graphics.Render(board);
 }
 
-void Engine::RunTurn()
+void Engine::Update()
 {
-	do
-	{
-		this->Render();
-		this->StoreMove();
-		this->ProcessMove();
-	} while (invalidMove);
+	this->Render();
+	if (!this->StoreMove()) return; // No move to process
+	this->ProcessMove();
 
 	this->ChangePlayers();
-	this->Benchmark();
-	Sleep(2000);
-
 }
 
-void Engine::Benchmark()
+bool Engine::StoreMove()
 {
-	constexpr int iterations = 1'000'000;
-
-	auto start = std::chrono::high_resolution_clock::now();
-	for (int i = 0; i < iterations; ++i) {
-		auto result = GetAttackedSquares(Color::WHITE);
+	std::pair<int, int> click = graphics.GetClick();
+	// Check if -1, -1, and return
+	if (click.first == -1 && click.second == -1)
+	{
+		return false;
 	}
-	auto end = std::chrono::high_resolution_clock::now();
 
-	auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-	std::cout << "Time per call: " << (ns / iterations) << " ns\n";
-}
+	static std::pair<int, int> firstClick = { -1, -1 }; // Static to retain value between calls
+	if (firstClick.first == -1 && firstClick.second == -1) // First click
+	{
+		firstClick = click;
+		return false; // Wait for second click
+	}
 
-void Engine::StoreMove()
-{
-	std::cout << (currentPlayer == Color::WHITE ? "White" : "Black") << " move: ";
-	std::cin >> notationMove;
+	else // Second click
+	{
+		// Convert to notation
+		notationMove = "";
+		notationMove += ('a' + firstClick.second); // Column a-h
+		notationMove += ('8' - firstClick.first); // Row 1-8
+		notationMove += ('a' + click.second); // Column a-h
+		notationMove += ('8' - click.first); // Row 1-8
+		firstClick = { -1, -1 }; // Reset for next move
+		return true; // Move ready to process
+	}
 }
 
 void Engine::ProcessMove()
