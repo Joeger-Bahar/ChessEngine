@@ -79,6 +79,15 @@ std::pair<int, int> GraphicsEngine::GetClick()
 	return { -1, -1 }; // No click detected
 }
 
+void GraphicsEngine::DrawSquareHighlight(int row, int col)
+{
+	// Draw an outline around the square
+	SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Green outline
+	SDL_Rect rect = { col * 75, row * 75, 75, 75 };
+	SDL_RenderDrawRect(renderer, &rect);
+	SDL_RenderPresent(renderer); // Update the screen to show the highlight
+}
+
 void GraphicsEngine::Initialize()
 {
 	// Initialize SDL

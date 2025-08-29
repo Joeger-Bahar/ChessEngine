@@ -13,6 +13,7 @@ public:
 	~GraphicsEngine();
 	void Render(Square board[8][8]);
 	std::pair<int, int> GetClick(); // Returns {row, col} of clicked square, or {-1, -1} if none
+	void DrawSquareHighlight(int row, int col); // Highlight a square (for showing selected piece, valid moves, etc.)
 
 private:
 	void Initialize();

@@ -1,10 +1,7 @@
 ﻿#include "engine.hpp"
 
 #include <iostream>
-#include <sstream>
-#include <cstdlib> // For console clearing
 #include <cmath>
-#include <array>
 
 Engine::Engine()
 {
@@ -80,14 +77,24 @@ void Engine::Render()
 //
 //	std::cout << output.str();
 
+	if (firstClick.first != -1 && firstClick.second != -1)
+	{
+		graphics.DrawSquareHighlight(firstClick.first, firstClick.second);
+	}
 	graphics.Render(board);
 }
 
 void Engine::Update()
 {
-	this->Render();
-	if (!this->StoreMove()) return; // No move to process
-	this->ProcessMove();
+	while (1)
+	{
+		this->Render();
+
+		if (!this->StoreMove()) continue;
+		this->ProcessMove();
+		if (this->invalidMove) { this->invalidMove = false; continue; } // Invalid move, ask for input again
+		break;
+	}
 
 	this->ChangePlayers();
 }
@@ -101,16 +108,31 @@ bool Engine::StoreMove()
 		return false;
 	}
 
-	static std::pair<int, int> firstClick = { -1, -1 }; // Static to retain value between calls
 	if (firstClick.first == -1 && firstClick.second == -1) // First click
 	{
+		// Check if the first click was valid
+		if (board[click.first][click.second].IsEmpty() ||
+			board[click.first][click.second].GetPiece().GetColor() != currentPlayer)
+		{
+			std::cout << "Invalid first click\n";
+			return false; // Invalid first click, wait for another
+		}
+
 		firstClick = click;
 		return false; // Wait for second click
 	}
-
+	
 	else // Second click
 	{
+		// If first and second click are the same, reset firstClick
+		if (firstClick == click)
+		{
+			firstClick = { -1, -1 };
+			return false; // Wait for new first click
+		}
+
 		// Convert to notation
+		// If move is invalid it gets caught and handled
 		notationMove = "";
 		notationMove += ('a' + firstClick.second); // Column a-h
 		notationMove += ('8' - firstClick.first); // Row 1-8
@@ -369,8 +391,8 @@ bool Engine::ValidMove(const Piece piece)
 check_pieces_in_way:
 	for (int i = 1; i < 8; ++i) // 7 loops because chess board has 8 squares
 	{
-		int rowChange = (move.endRow - move.startRow) / max(1, abs(move.endRow - move.startRow)); // Normalize row difference to 1 or -1 (up or down)
-		int colChange = (move.endCol - move.startCol) / max(1, abs(move.endCol - move.startCol)); // Normalize column difference to 1 or -1 (left or right)
+		int rowChange = (move.endRow - move.startRow) / std::max(1, abs(move.endRow - move.startRow)); // Normalize row difference to 1 or -1 (up or down)
+		int colChange = (move.endCol - move.startCol) / std::max(1, abs(move.endCol - move.startCol)); // Normalize column difference to 1 or -1 (left or right)
 		int currentRow = move.startRow + i * rowChange; // Starts at move.startRow and moves towards move.endRow
 		int currentCol = move.startCol + i * colChange; // Starts at move.startCol and moves towards move.endCol
 
