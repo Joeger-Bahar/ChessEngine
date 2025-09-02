@@ -35,6 +35,7 @@ private:
 	void AddKingAttacks(int row, int col, std::array<bool, 64>& attacked);
 
 	std::vector<Move> moveHistory;
+	std::vector<std::pair<int, int>> highlights;
 	Square board[8][8];
 	GraphicsEngine graphics;
 	std::string notationMove;

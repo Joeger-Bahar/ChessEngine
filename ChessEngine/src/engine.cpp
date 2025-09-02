@@ -4,6 +4,7 @@
 #include <cmath>
 
 Engine::Engine()
+	: firstClick({ -1, -1 }), graphics()
 {
 	// Initialize the board with pieces in their starting positions
 	for (int i = 0; i < 8; ++i)
@@ -41,53 +42,19 @@ Engine::~Engine()
 
 void Engine::Render()
 {
-//	// Clear the console (platform-specific)
-//#ifdef _WIN32
-//	system("cls");
-//#else
-//	system("clear");
-//#endif
-//
-//	// Use stringstream to build the output for efficiency (console slow)
-//	std::ostringstream output;
-//
-//	output << "Current Player..." << (currentPlayer == Color::WHITE ? "White" : "Black") << '\n';
-//	output << "FEN.............." << this->GetFEN() << '\n';
-//	output << "In Check........." << ((checkStatus == Color::NONE) ? "None" : (checkStatus == Color::WHITE) ? "Black" : "White");
-//	output << "\nCheckmate........" << ((!checkmate) ? "No" : (checkStatus == Color::WHITE) ? "Yes (White)" : "Yes (Black)") << '\n';
-//
-//
-//	for (int i = 0; i < 8; ++i)
-//	{
-//		output << "\n+---+---+---+---+---+---+---+---+\n| ";
-//		for (int j = 0; j < 8; ++j)
-//		{
-//			output << board[i][j].GetPiece().Render();
-//		}
-//		output << (8 - i); // Row number
-//	}
-//	output << "\n+---+---+---+---+---+---+---+---+\n";
-//	output << "  a   b   c   d   e   f   g   h\n\n";
-//
-//	if (invalidMove)
-//	{
-//		output << "Invalid move! Please try again.\n";
-//		invalidMove = false; // Reset invalid move status
-//	}
-//
-//	std::cout << output.str();
-
+	
 	if (firstClick.first != -1 && firstClick.second != -1)
 	{
-		graphics.DrawSquareHighlight(firstClick.first, firstClick.second);
+		highlights.push_back(firstClick);
 	}
-	graphics.Render(board);
+	graphics.Render(board, highlights);
 }
 
 void Engine::Update()
 {
 	while (1)
 	{
+		this->GetAttackedSquares(currentPlayer);
 		this->Render();
 
 		if (!this->StoreMove()) continue;
@@ -102,6 +69,12 @@ void Engine::Update()
 bool Engine::StoreMove()
 {
 	std::pair<int, int> click = graphics.GetClick();
+	// -2 -2 for undo
+	if (click.first == -2 && click.second == -2)
+	{
+		UndoMove();
+		return false;
+	}
 	// Check if -1, -1, and return
 	if (click.first == -1 && click.second == -1)
 	{
@@ -516,10 +489,27 @@ std::vector<uint8_t> Engine::GetAttackedSquares(Color color)
 
 	std::vector<uint8_t> attackedSquares;
 	for (int idx = 0; idx < 64; ++idx)
-		if (attacked[idx]) attackedSquares.push_back(idx);
+	{
+		if (attacked[idx])
+		{
+			int row = idx / 8;
+			int col = idx % 8;
+			Piece targetPiece = board[row][col].GetPiece();
+			if (targetPiece == Pieces::NONE || targetPiece.GetColor() != color)
+			{
+				attackedSquares.push_back(idx);
+			}
+		}
+	}
+	// Add attacked squares to highlights for rendering
+
+	highlights.clear();
+	for (int idx : attackedSquares)
+		highlights.push_back({ idx / 8, idx % 8 });
 
 	return attackedSquares;
 }
+
 
 std::string Engine::GetFEN() const
 {
@@ -606,7 +596,7 @@ void Engine::UndoMove()
 	Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
 	board[move.startRow][move.startCol].SetPiece(movingPiece);
 	board[move.endRow][move.endCol].SetPiece(move.capturedPiece); // Restore captured piece, if any
-	// Don't need to change players because this counts as a "turn"
+	this->ChangePlayers();
 }
 
 void Engine::AddKnightAttacks(int row, int col, std::array<bool, 64>& attacked)

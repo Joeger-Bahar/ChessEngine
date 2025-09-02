@@ -14,7 +14,7 @@ GraphicsEngine::~GraphicsEngine()
 	Shutdown();
 }
 
-void GraphicsEngine::Render(Square board[8][8])
+void GraphicsEngine::Render(Square board[8][8], const std::vector<std::pair<int, int>>& highlights)
 {
 	// Clear screen
 	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
@@ -32,8 +32,20 @@ void GraphicsEngine::Render(Square board[8][8])
 				SDL_SetRenderDrawColor(renderer, 181, 136, 99, 255); // Dark squares
 			SDL_Rect rect = { j * 75, i * 75, 75, 75 }; // Each square is 75x75 pixels
 			SDL_RenderFillRect(renderer, &rect);
+		}
+	}
 
-			// Draw pieces
+	// Draw highlights
+	for (const auto& [row, col] : highlights)
+	{
+		DrawSquareHighlight(row, col);
+	}
+
+	// Draw pieces
+	for (int i = 0; i < 8; ++i)
+	{
+		for (int j = 0; j < 8; ++j)
+		{
 			Piece piece = board[i][j].GetPiece();
 			if (piece == Pieces::NONE) continue; // No piece to draw
 
@@ -75,6 +87,11 @@ std::pair<int, int> GraphicsEngine::GetClick()
 				return { row, col };
 			}
 		}
+		else if (event.type == SDL_KEYDOWN) { // Left arrow for undo
+			if (event.key.keysym.sym == SDLK_LEFT) {
+				return { -2, -2 }; // Special code for undo
+			}
+		}
 	}
 	return { -1, -1 }; // No click detected
 }
@@ -84,8 +101,7 @@ void GraphicsEngine::DrawSquareHighlight(int row, int col)
 	// Draw an outline around the square
 	SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Green outline
 	SDL_Rect rect = { col * 75, row * 75, 75, 75 };
-	SDL_RenderDrawRect(renderer, &rect);
-	SDL_RenderPresent(renderer); // Update the screen to show the highlight
+	SDL_RenderFillRect(renderer, &rect);
 }
 
 void GraphicsEngine::Initialize()
