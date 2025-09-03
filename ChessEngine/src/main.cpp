@@ -1,10 +1,7 @@
 #include "engine.hpp"
 #include "graphics/graphicsEngine.hpp"
 
-
-// TODO: List of attacked squares (untested)
-// TODO: Checks and checkmate
-// TODO: GUI
+// TODO: Checkmate
 // TODO: Promotion
 int main()
 {

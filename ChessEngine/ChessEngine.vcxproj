@@ -136,6 +136,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\boardCalculator.cpp" />
     <ClCompile Include="src\engine.cpp" />
     <ClCompile Include="src\graphics\graphicsEngine.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -144,6 +145,7 @@
     <ClCompile Include="src\square.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\boardCalculator.hpp" />
     <ClInclude Include="src\engine.hpp" />
     <ClInclude Include="src\graphics\graphicsEngine.hpp" />
     <ClInclude Include="src\move.hpp" />
