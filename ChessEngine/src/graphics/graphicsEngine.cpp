@@ -14,12 +14,26 @@ GraphicsEngine::~GraphicsEngine()
 	Shutdown();
 }
 
-void GraphicsEngine::Render(Square board[8][8], const std::vector<std::pair<int, int>>& highlights)
+void GraphicsEngine::Render(Square board[8][8])
 {
 	// Clear screen
 	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 	SDL_RenderClear(renderer);
 
+	RenderBoard(board);
+
+	// Draw highlights
+	for (const auto& func : queuedRenders) func();
+	queuedRenders.clear();
+
+	RenderPieces(board);
+
+	// Present the rendered frame
+	SDL_RenderPresent(renderer);
+}
+
+void GraphicsEngine::RenderBoard(Square board[8][8])
+{
 	// Draw chess board
 	for (int i = 0; i < 8; ++i)
 	{
@@ -34,13 +48,10 @@ void GraphicsEngine::Render(Square board[8][8], const std::vector<std::pair<int,
 			SDL_RenderFillRect(renderer, &rect);
 		}
 	}
+}
 
-	// Draw highlights
-	for (const auto& [row, col] : highlights)
-	{
-		DrawSquareHighlight(row, col);
-	}
-
+void GraphicsEngine::RenderPieces(Square board[8][8])
+{
 	// Draw pieces
 	for (int i = 0; i < 8; ++i)
 	{
@@ -67,8 +78,6 @@ void GraphicsEngine::Render(Square board[8][8], const std::vector<std::pair<int,
 			}
 		}
 	}
-	// Present the rendered frame
-	SDL_RenderPresent(renderer);
 }
 
 std::pair<int, int> GraphicsEngine::GetClick()
@@ -93,13 +102,14 @@ std::pair<int, int> GraphicsEngine::GetClick()
 			}
 		}
 	}
+
 	return { -1, -1 }; // No click detected
 }
 
-void GraphicsEngine::DrawSquareHighlight(int row, int col)
+void GraphicsEngine::DrawSquareHighlight(int row, int col, SDL_Color color)
 {
 	// Draw an outline around the square
-	SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255); // Green outline
+	SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 	SDL_Rect rect = { col * 75, row * 75, 75, 75 };
 	SDL_RenderFillRect(renderer, &rect);
 }
@@ -129,6 +139,8 @@ void GraphicsEngine::Initialize()
 		exit(1);
 	}
 
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
 	// Load pieces from single piece map (white on top, king, queen, bishops, knights, rooks, pawns left to right, then black)
 	SDL_Surface* pieceSurfaces[12];
 	SDL_Surface* pieceMap = IMG_Load("res/pieces.png");
@@ -145,9 +157,12 @@ void GraphicsEngine::Initialize()
 		pieceSurfaces[i] = SDL_CreateRGBSurface(0, srcRect.w, srcRect.h, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 		SDL_BlitSurface(pieceMap, &srcRect, pieceSurfaces[i], NULL);
 		pieceTextures[i] = SDL_CreateTextureFromSurface(renderer, pieceSurfaces[i]);
+		SDL_SetTextureScaleMode(pieceTextures[i], SDL_ScaleModeLinear);
 	}
 
 	SDL_FreeSurface(pieceMap);
+	// After creating each texture in Initialize()
+
 }
 
 void GraphicsEngine::Shutdown()

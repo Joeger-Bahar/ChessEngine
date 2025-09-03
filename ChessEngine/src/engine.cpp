@@ -42,19 +42,20 @@ Engine::~Engine()
 
 void Engine::Render()
 {
-	
+	// If first click is valid highlight the square
 	if (firstClick.first != -1 && firstClick.second != -1)
 	{
-		highlights.push_back(firstClick);
+		//graphics.DrawSquareHighlight(firstClick.first, firstClick.second, { 0, 255, 0, 100 }); // Green highlight
+		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(firstClick.first, firstClick.second, { 0, 255, 0, 100 }); });
 	}
-	graphics.Render(board, highlights);
+	graphics.Render(board);
 }
 
 void Engine::Update()
 {
 	while (1)
 	{
-		this->GetAttackedSquares(currentPlayer);
+		//this->GetAttackedSquares(currentPlayer);
 		this->Render();
 
 		if (!this->StoreMove()) continue;
@@ -106,6 +107,25 @@ bool Engine::StoreMove()
 
 		// Convert to notation
 		// If move is invalid it gets caught and handled
+
+		// Check first for castling
+		if (board[firstClick.first][firstClick.second].GetPiece() == Pieces::KING &&
+			abs(firstClick.second - click.second) == 2 && firstClick.first == click.first)
+		{
+			if (click.second == 6) // Kingside
+				notationMove = "O-O";
+			else if (click.second == 2) // Queenside
+				notationMove = "O-O-O";
+			else
+			{
+				firstClick = { -1, -1 }; // Reset for next move
+				return false; // Invalid castling move, wait for new input
+			}
+			firstClick = { -1, -1 }; // Reset for next move
+			return true; // Move ready to process
+		}
+
+		// Normal move
 		notationMove = "";
 		notationMove += ('a' + firstClick.second); // Column a-h
 		notationMove += ('8' - firstClick.first); // Row 1-8
@@ -134,6 +154,7 @@ void Engine::ProcessMove()
 	else if (notationMove == "undo")
 	{
 		UndoMove();
+		ChangePlayers();
 		return;
 	}
 	// TODO: If king or rook has moved in the game, cannot castle
@@ -198,7 +219,6 @@ void Engine::ProcessMove()
 
 	else // Convert notation to board indices and validate the move
 	{
-
 		move.startCol = notationMove[0] - 'a'; // Convert 'a'-'h' to 0-7
 		move.startRow = 8 - (notationMove[1] - '0'); // Convert '1'-'8' to 7-0
 		move.endCol = notationMove[2] - 'a'; // Convert 'a'-'h' to 0-7
@@ -288,18 +308,47 @@ void Engine::ProcessMove()
 		}
 
 		move.capturedPiece = targetPiece;
-		// Move piece
+
+		// Save board state
+		Piece savedStart = movingPiece;
+		Piece savedEnd = targetPiece;
+
+		// Make the move
 		board[move.endRow][move.endCol].SetPiece(movingPiece);
-		board[move.startRow][move.startCol].SetPiece(Pieces::NONE); // Clear the starting square
+		board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 
-		// Add move to history
+		// Check if king is in check after move
+		if (KingInCheck(currentPlayer))
+		{
+			// Undo the move
+			board[move.startRow][move.startCol].SetPiece(savedStart);
+			board[move.endRow][move.endCol].SetPiece(savedEnd);
+
+			this->invalidMove = true; // Move is illegal
+			return;
+		}
+
+		// Otherwise commit move
 		moveHistory.push_back(move);
-
 		return;
 	}
 
 	invalidMove = true;
 }
+
+//void Engine::Benchmark()
+//{
+//	constexpr int iterations = 1'000'000;
+//
+//	auto start = std::chrono::high_resolution_clock::now();
+//	for (int i = 0; i < iterations; ++i) {
+//		auto result = GetAttackedSquares(Color::WHITE);
+//	}
+//	auto end = std::chrono::high_resolution_clock::now();
+//
+//	auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+//	std::cout << "Time per call: " << (ns / iterations) << " ns\n";
+//}
 
 bool Engine::ValidMove(const Piece piece)
 {
@@ -394,6 +443,94 @@ check_pieces_in_way:
 	}
 }
 
+bool inBounds(int row, int col) {
+	return row >= 0 && row < 8 && col >= 0 && col < 8;
+}
+
+bool Engine::IsSquareAttacked(int row, int col, Color byColor)
+{
+	const int knightOffsets[8][2] = {
+	{2, 1}, {1, 2}, {-1, 2}, {-2, 1},
+	{-2, -1}, {-1, -2}, {1, -2}, {2, -1}
+	};
+	const int kingOffsets[8][2] = {
+		{1, 0}, {1, 1}, {0, 1}, {-1, 1},
+		{-1, 0}, {-1, -1}, {0, -1}, {1, -1}
+	};
+
+	// Directions for sliding pieces
+	const int bishopDirs[4][2] = { {1,1}, {1,-1}, {-1,1}, {-1,-1} };
+	const int rookDirs[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+	const int queenDirs[8][2] = { {1,1}, {1,-1}, {-1,1}, {-1,-1},
+								   {1,0}, {-1,0}, {0,1}, {0,-1} };
+
+	// Doesn't use GetAttackedSquares for efficiency
+	// 1. Pawns
+	int pawnDir = (byColor == Color::WHITE) ? -1 : 1; // white pawns attack up (-1), black down (+1)
+	int pawnRows[2] = { row + pawnDir, row + pawnDir };
+	int pawnCols[2] = { col - 1, col + 1 };
+	for (int i = 0; i < 2; i++) {
+		if (inBounds(pawnRows[i], pawnCols[i])) {
+			Piece p = board[pawnRows[i]][pawnCols[i]].GetPiece();
+			if (p.type == Pieces::PAWN && p.color == byColor)
+				return true;
+		}
+	}
+
+	// 2. Knights
+	for (auto& off : knightOffsets) {
+		int r = row + off[0], c = col + off[1];
+		if (inBounds(r, c)) {
+			Piece p = board[r][c].GetPiece();
+			if (p.type == Pieces::KNIGHT && p.color == byColor)
+				return true;
+		}
+	}
+
+	// 3. Bishops / Queens (diagonals)
+	for (auto& dir : bishopDirs) {
+		int r = row + dir[0], c = col + dir[1];
+		while (inBounds(r, c)) {
+			Piece p = board[r][c].GetPiece();
+			if (p.type != Pieces::NONE) {
+				if (p.color == byColor &&
+					(p.type == Pieces::BISHOP || p.type == Pieces::QUEEN))
+					return true;
+				break; // blocked
+			}
+			r += dir[0]; c += dir[1];
+		}
+	}
+
+	// 4. Rooks / Queens (straights)
+	for (auto& dir : rookDirs) {
+		int r = row + dir[0], c = col + dir[1];
+		while (inBounds(r, c)) {
+			Piece p = board[r][c].GetPiece();
+			if (p.type != Pieces::NONE) {
+				if (p.color == byColor &&
+					(p.type == Pieces::ROOK || p.type == Pieces::QUEEN))
+					return true;
+				break; // blocked
+			}
+			r += dir[0]; c += dir[1];
+		}
+	}
+
+	// 5. King
+	for (auto& off : kingOffsets) {
+		int r = row + off[0], c = col + off[1];
+		if (inBounds(r, c)) {
+			Piece p = board[r][c].GetPiece();
+			if (p.type == Pieces::KING && p.color == byColor)
+				return true;
+		}
+	}
+
+	return false; // no attackers found
+
+}
+
 //std::vector<uint8_t> Engine::GetAttackedSquares(Color color)
 //{
 //	std::vector<uint8_t> attackedSquares;
@@ -435,80 +572,87 @@ check_pieces_in_way:
 
 // This looks messy and annoying, and it takes up a lot of space, but it's about 5x faster
 // than a brute force (above)
-std::vector<uint8_t> Engine::GetAttackedSquares(Color color)
-{
-	// Rook directions (up, down, left, right)
-	const std::vector<std::pair<int, int>> rookDirs = {
-		{-1, 0}, {1, 0}, {0, -1}, {0, 1}
-	};
-
-	// Bishop directions (diagonals)
-	const std::vector<std::pair<int, int>> bishopDirs = {
-		{-1, -1}, {-1, 1}, {1, -1}, {1, 1}
-	};
-
-	// Queen = rook + bishop
-	const std::vector<std::pair<int, int>> queenDirs = {
-		{-1, 0}, {1, 0}, {0, -1}, {0, 1},
-		{-1, -1}, {-1, 1}, {1, -1}, {1, 1}
-	};
-
-	// Attacked can be used as a bitboard for attacked squares
-	std::array<bool, 64> attacked = { false };
-
-	for (int i = 0; i < 8; ++i)
-	{
-		for (int j = 0; j < 8; ++j)
-		{
-			Piece piece = board[i][j].GetPiece();
-			if (piece == Pieces::NONE || piece.GetColor() != color) continue;
-
-			switch (piece)
-			{
-			case Pieces::PAWN:
-				AddPawnAttacks(i, j, color, attacked);
-				break;
-			case Pieces::KNIGHT:
-				AddKnightAttacks(i, j, attacked);
-				break;
-			case Pieces::BISHOP:
-				AddSlidingAttacks(i, j, attacked, bishopDirs);
-				break;
-			case Pieces::ROOK:
-				AddSlidingAttacks(i, j, attacked, rookDirs);
-				break;
-			case Pieces::QUEEN:
-				AddSlidingAttacks(i, j, attacked, queenDirs);
-				break;
-			case Pieces::KING:
-				AddKingAttacks(i, j, attacked);
-				break;
-			}
-		}
-	}
-
-	std::vector<uint8_t> attackedSquares;
-	for (int idx = 0; idx < 64; ++idx)
-	{
-		if (attacked[idx])
-		{
-			int row = idx / 8;
-			int col = idx % 8;
-			Piece targetPiece = board[row][col].GetPiece();
-			if (targetPiece == Pieces::NONE || targetPiece.GetColor() != color)
-			{
-				attackedSquares.push_back(idx);
-			}
-		}
-	}
-	// Add attacked squares to highlights for rendering
-
-	highlights.clear();
-	for (int idx : attackedSquares)
-		highlights.push_back({ idx / 8, idx % 8 });
-
-	return attackedSquares;
-}
+// // Unused
+//std::vector<uint8_t> Engine::GetAttackedSquares(Color color)
+//{
+//	// Rook directions (up, down, left, right)
+//	const std::vector<std::pair<int, int>> rookDirs = {
+//		{-1, 0}, {1, 0}, {0, -1}, {0, 1}
+//	};
+//
+//	// Bishop directions (diagonals)
+//	const std::vector<std::pair<int, int>> bishopDirs = {
+//		{-1, -1}, {-1, 1}, {1, -1}, {1, 1}
+//	};
+//
+//	// Queen = rook + bishop
+//	const std::vector<std::pair<int, int>> queenDirs = {
+//		{-1, 0}, {1, 0}, {0, -1}, {0, 1},
+//		{-1, -1}, {-1, 1}, {1, -1}, {1, 1}
+//	};
+//
+//	// Attacked can be used as a bitboard for attacked squares
+//	std::array<bool, 64> attacked = { false };
+//
+//	for (int i = 0; i < 8; ++i)
+//	{
+//		for (int j = 0; j < 8; ++j)
+//		{
+//			Piece piece = board[i][j].GetPiece();
+//			if (piece == Pieces::NONE || piece.GetColor() != color) continue;
+//
+//			switch (piece)
+//			{
+//			case Pieces::PAWN:
+//				AddPawnAttacks(i, j, color, attacked);
+//				break;
+//			case Pieces::KNIGHT:
+//				AddKnightAttacks(i, j, attacked);
+//				break;
+//			case Pieces::BISHOP:
+//				AddSlidingAttacks(i, j, attacked, bishopDirs);
+//				break;
+//			case Pieces::ROOK:
+//				AddSlidingAttacks(i, j, attacked, rookDirs);
+//				break;
+//			case Pieces::QUEEN:
+//				AddSlidingAttacks(i, j, attacked, queenDirs);
+//				break;
+//			case Pieces::KING:
+//				AddKingAttacks(i, j, attacked);
+//				break;
+//			}
+//		}
+//	}
+//
+//	std::vector<uint8_t> attackedSquares;
+//	for (int idx = 0; idx < 64; ++idx)
+//	{
+//		if (attacked[idx])
+//		{
+//			int row = idx / 8;
+//			int col = idx % 8;
+//			Piece targetPiece = board[row][col].GetPiece();
+//			if (targetPiece == Pieces::NONE || targetPiece.GetColor() != color)
+//			{
+//				attackedSquares.push_back(idx);
+//			}
+//		}
+//	}
+//
+//	// Add attacked squares to highlights for rendering
+//	for (int idx : attackedSquares)
+//	{
+//		// Queue a red square highlight for each attacked square
+//		int row = idx / 8;
+//		int col = idx % 8;
+//		graphics.QueueRender([this, row, col]() { this->graphics.DrawSquareHighlight(2, 0,
+//			(this->currentPlayer == Color::WHITE) ? SDL_Color(0, 255, 0, 255) : SDL_Color(255, 0, 0, 255 ));
+//			});
+//	}
+//
+//	return attackedSquares;
+//}
 
 
 std::string Engine::GetFEN() const
@@ -596,7 +740,28 @@ void Engine::UndoMove()
 	Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
 	board[move.startRow][move.startCol].SetPiece(movingPiece);
 	board[move.endRow][move.endCol].SetPiece(move.capturedPiece); // Restore captured piece, if any
-	this->ChangePlayers();
+}
+
+bool Engine::KingInCheck(Color color)
+{
+	int kingRow = -1, kingCol = -1;
+	for (int r = 0; r < 8; r++)
+	{
+		for (int c = 0; c < 8; c++)
+		{
+			Piece p = board[r][c].GetPiece();
+			if (p == Pieces::KING && p.GetColor() == color)
+			{
+				kingRow = r;
+				kingCol = c;
+				break;
+			}
+		}
+	}
+
+	// Now test if any enemy piece attacks the king square
+	Color enemy = (color == Color::WHITE ? Color::BLACK : Color::WHITE);
+	return IsSquareAttacked(kingRow, kingCol, enemy);
 }
 
 void Engine::AddKnightAttacks(int row, int col, std::array<bool, 64>& attacked)

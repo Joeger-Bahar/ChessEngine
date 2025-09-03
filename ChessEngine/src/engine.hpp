@@ -17,16 +17,19 @@ public:
 	~Engine();
 
 	void Update();
+	//void Benchmark();
 
 private:
 	void Render();
 	bool StoreMove();
 	void ProcessMove();
 	bool ValidMove(const Piece piece);
-	std::vector<uint8_t> GetAttackedSquares(Color color); // Returns a list of squares (0-63) attacked by the given color
+	bool IsSquareAttacked(int row, int col, Color byColor);
+	//std::vector<uint8_t> GetAttackedSquares(Color color); // Returns a list of squares (0-63) attacked by the given color
 	std::string GetFEN() const;
 	void UndoMove();
 	inline void ChangePlayers() { currentPlayer = (currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
+	bool KingInCheck(Color color);
 
 	// These were generated with AI (ChatGPT 5)
 	void AddKnightAttacks(int row, int col, std::array<bool, 64>& attacked);
@@ -35,7 +38,6 @@ private:
 	void AddKingAttacks(int row, int col, std::array<bool, 64>& attacked);
 
 	std::vector<Move> moveHistory;
-	std::vector<std::pair<int, int>> highlights;
 	Square board[8][8];
 	GraphicsEngine graphics;
 	std::string notationMove;
