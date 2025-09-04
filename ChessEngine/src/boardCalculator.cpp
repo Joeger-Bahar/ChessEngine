@@ -16,8 +16,11 @@ const int BoardCalculator::queenDirs[8][2] = { {1 ,1}, {1, -1}, {-1, 1}, {-1, -1
 
 bool BoardCalculator::IsSquareAttacked(int row, int col, Color byColor, const Square board[8][8])
 {
+	if (!InBounds(row, col) || byColor == Color::NONE)
+		return false;
+
 	// 1. Pawns
-	int pawnDir = (byColor == Color::WHITE) ? -1 : 1; // White pawns attack up (-1), black down (+1)
+	int pawnDir = (byColor == Color::WHITE) ? 1 : -1; // White pawns attack up (-1), black down (+1)
 	int pawnRows[2] = { row + pawnDir, row + pawnDir };
 	int pawnCols[2] = { col - 1, col + 1 };
 	for (int i = 0; i < 2; i++)
@@ -152,6 +155,7 @@ std::vector<uint8_t> BoardCalculator::GetAttackedSquares(Color color, const Squa
 	return attackedSquares;
 }
 
+// Bitboard
 std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Square board[8][8])
 {
 	Piece piece = board[row][col].GetPiece();
@@ -181,12 +185,41 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 	default:
 		return {};
 	}
+
 	std::vector<uint8_t> validMoves;
 	for (int idx = 0; idx < 64; ++idx)
 	{
-		if (moves[idx])
-			validMoves.push_back(idx);
+		if (!moves[idx]) continue;
+
+		// Make a copy of the board
+		Square tempBoard[8][8];
+		memcpy(tempBoard, board, sizeof(Square) * 64);
+
+		// Apply the move (row,col -> idx/8,idx%8)
+		int destRow = idx / 8;
+		int destCol = idx % 8;
+		Piece movingPiece = tempBoard[row][col].GetPiece();
+		tempBoard[destRow][destCol].SetPiece(movingPiece);
+		tempBoard[row][col].SetPiece(Piece(Pieces::NONE, Color::NONE));
+
+		// Find king position
+		int kingRow = -1, kingCol = -1;
+		for (int r = 0; r < 8; r++) {
+			for (int c = 0; c < 8; c++) {
+				Piece p = tempBoard[r][c].GetPiece();
+				if (p.type == Pieces::KING && p.color == color) {
+					kingRow = r; kingCol = c;
+				}
+			}
+		}
+
+		// Check if king is attacked
+		Color enemy = (color == Color::WHITE) ? Color::BLACK : Color::WHITE;
+		if (!IsSquareAttacked(kingRow, kingCol, enemy, tempBoard)) {
+			validMoves.push_back(idx); // Legal move
+		}
 	}
+
 	return validMoves;
 }
 

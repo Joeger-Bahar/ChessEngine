@@ -13,7 +13,9 @@ public:
 	static bool IsSquareAttacked(int row, int col, Color byColor, const Square board[8][8]);
 	static bool InBounds(int row, int col);
 	static std::vector<uint8_t> GetAttackedSquares(Color color, const Square board[8][8]);
+	// This gets moves for a piece, so it checks for checks as well
 	static std::vector<uint8_t> GetValidMoves(int row, int col, const Square board[8][8]);
+	// This is pseudo-legal moves, it does not check for checks, for faster engine calculations
 	static std::vector<uint8_t> GetAllMoves(Color color, const Square board[8][8]);
 
 private:
