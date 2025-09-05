@@ -49,4 +49,6 @@ private:
 	bool invalidMove = false; // If the last move was invalid
 	bool whiteCastlingRights[2] = { true, true }; // { queenside, kingside }
 	bool blackCastlingRights[2] = { true, true };
+	std::pair<int, int> whiteKingPos = { -1, -1 };
+	std::pair<int, int> blackKingPos = { -1, -1 };
 };
