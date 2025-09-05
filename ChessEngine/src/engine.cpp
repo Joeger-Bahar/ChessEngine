@@ -6,13 +6,13 @@
 Engine::Engine()
 	: firstClick({ -1, -1 }), graphics()
 {
-	InitializeBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+	LoadPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 }
 
 Engine::Engine(std::string fen)
 	: firstClick({ -1, -1 }), graphics()
 {
-		InitializeBoard(fen);
+		LoadPosition(fen);
 }
 
 Engine::~Engine()
@@ -20,7 +20,7 @@ Engine::~Engine()
 	std::cout << "Chess engine destroyed." << std::endl;
 }
 
-void Engine::InitializeBoard(std::string fen)
+void Engine::LoadPosition(std::string fen)
 {
 	// Load the board from a FEN string
 	// Loop through the FEN string and set up the board accordingly
@@ -172,6 +172,13 @@ bool Engine::StoreMove()
 		{
 			firstClick = { -1, -1 };
 			return false; // Wait for new first click
+		}
+		// If click is on a piece of the same color, change firstClick
+		if (!board[click.first][click.second].IsEmpty() &&
+			board[click.first][click.second].GetPiece().GetColor() == currentPlayer)
+		{
+			firstClick = click;
+			return false; // Wait for second click
 		}
 
 		// Convert to notation

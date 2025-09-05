@@ -1,6 +1,5 @@
 #include "boardCalculator.hpp"
 
-#include <algorithm>
 #include <iostream>
 
 // Define offsets and directions
