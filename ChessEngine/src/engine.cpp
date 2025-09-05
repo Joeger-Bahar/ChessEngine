@@ -584,7 +584,7 @@ void Engine::UndoMove()
 	moveHistory.pop_back();
 	Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
 	if (move.promotion != Pieces::NONE) // If it was a promotion, revert to pawn
-		movingPiece = Piece(Pieces::PAWN, currentPlayer);
+		movingPiece = Piece(Pieces::PAWN, movingPiece.GetColor());
 	board[move.startRow][move.startCol].SetPiece(movingPiece);
 	board[move.endRow][move.endCol].SetPiece(move.capturedPiece); // Restore captured piece, if any
 }
