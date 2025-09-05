@@ -249,9 +249,15 @@ void Engine::ProcessMove()
 		}
 
 		// Make the move
-		move.capturedPiece = targetPiece;
 		board[move.endRow][move.endCol].SetPiece(movingPiece);
 		board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		// Check for promotion
+		if (movingPiece == Pieces::PAWN && (move.endRow == 0 || move.endRow == 7))
+		{
+			board[move.endRow][move.endCol].SetPiece(Piece(Pieces::QUEEN, currentPlayer)); // Auto promote to queen
+			move.promotion = Pieces::QUEEN;
+		}
+		move.capturedPiece = targetPiece;
 		moveHistory.push_back(move);
 
 		// Check if king is in check after move
@@ -550,9 +556,10 @@ std::string Engine::GetFEN() const
 	}
 	else
 	{
-		fen += " -";
+		fen += " - ";
 	}
-	fen += " 0 "; // Halfmove clock
+	fen += halfmoves / 2; // Halfmove clock
+	fen += " ";
 	fen += std::to_string(moveHistory.size() / 2 + 1); // Fullmove number
 
 	return fen;
@@ -569,6 +576,8 @@ void Engine::UndoMove()
 	move = moveHistory.back();
 	moveHistory.pop_back();
 	Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
+	if (move.promotion != Pieces::NONE) // If it was a promotion, revert to pawn
+		movingPiece = Piece(Pieces::PAWN, currentPlayer);
 	board[move.startRow][move.startCol].SetPiece(movingPiece);
 	board[move.endRow][move.endCol].SetPiece(move.capturedPiece); // Restore captured piece, if any
 }

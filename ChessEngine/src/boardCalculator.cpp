@@ -216,46 +216,90 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 	return validMoves;
 }
 
-std::vector<uint8_t> BoardCalculator::GetAllMoves(Color color, const Square board[8][8])
+std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8])
 {
-	std::array<bool, 64> allMoves = { false };
+	std::vector<Move> moves;
 	for (int i = 0; i < 8; ++i)
 	{
 		for (int j = 0; j < 8; ++j)
 		{
 			Piece piece = board[i][j].GetPiece();
 			if (piece == Pieces::NONE || piece.GetColor() != color) continue;
+
+			std::array<bool, 64> pieceMoves = { false };
+
 			switch (piece)
 			{
 			case Pieces::PAWN:
-				AddPawnMoves(i, j, color, allMoves, board);
-				break;
+			{
+				AddPawnMoves(i, j, color, pieceMoves, board);
+
+				// Promotion
+				if ((color == Color::WHITE && i == 1) ||
+				    (color == Color::BLACK && i == 6))
+				{
+					int endRow = (color == Color::WHITE) ? 0 : 7;
+
+					for (int dc = -1; dc <= 1; ++dc)
+					{
+						int endCol = j + dc;
+						if (endCol < 0 || endCol >= 8) continue;
+
+						int idx = endRow * 8 + endCol;
+						if (pieceMoves[idx])
+						{
+							for (Pieces promo : {Pieces::QUEEN, Pieces::ROOK, Pieces::BISHOP, Pieces::KNIGHT})
+							{
+								Move move;
+								move.startRow = i;
+								move.startCol = j;
+								move.endRow = endRow;
+								move.endCol = endCol;
+								move.capturedPiece = board[endRow][endCol].GetPiece();
+								move.promotion = promo;
+								moves.push_back(move);
+							}
+						}
+					}
+				}
+
+				continue; // Skip default pawn move gen
+			}
+
 			case Pieces::KNIGHT:
-				AddKnightMoves(i, j, color, allMoves, board);
+				AddKnightMoves(i, j, color, pieceMoves, board);
 				break;
 			case Pieces::BISHOP:
-				AddSlidingMoves(i, j, color, allMoves, bishopDirs, 4, board);
+				AddSlidingMoves(i, j, color, pieceMoves, bishopDirs, 4, board);
 				break;
 			case Pieces::ROOK:
-				AddSlidingMoves(i, j, color, allMoves, rookDirs, 4, board);
+				AddSlidingMoves(i, j, color, pieceMoves, rookDirs, 4, board);
 				break;
 			case Pieces::QUEEN:
-				AddSlidingMoves(i, j, color, allMoves, queenDirs, 8, board);
+				AddSlidingMoves(i, j, color, pieceMoves, queenDirs, 8, board);
 				break;
 			case Pieces::KING:
-				AddKingMoves(i, j, color, allMoves, board);
+				AddKingMoves(i, j, color, pieceMoves, board);
 				break;
+			}
+
+			for (int idx = 0; idx < 64; ++idx)
+			{
+				if (pieceMoves[idx])
+				{
+					Move move;
+					move.startRow = i;
+					move.startCol = j;
+					move.endRow = idx / 8;
+					move.endCol = idx % 8;
+					move.capturedPiece = board[move.endRow][move.endCol].GetPiece();
+					moves.push_back(move);
+				}
 			}
 		}
 	}
 
-	std::vector<uint8_t> validMoves;
-	for (int idx = 0; idx < 64; ++idx)
-	{
-		if (allMoves[idx])
-			validMoves.push_back(idx);
-	}
-	return validMoves;
+	return moves;
 }
 
 void BoardCalculator::AddKnightAttacks(int row, int col, std::array<bool, 64>& attacked)
@@ -349,7 +393,7 @@ void BoardCalculator::AddPawnMoves(int row, int col, Color color, std::array<boo
 		}
 	}
 
-	// Note: En passant and promotion are not handled here
+	// Note: En passant is not handled here
 }
 
 void BoardCalculator::AddKnightMoves(int row, int col, Color color, std::array<bool, 64>& moves, const Square board[8][8])

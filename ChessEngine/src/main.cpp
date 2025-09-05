@@ -1,11 +1,10 @@
 #include "engine.hpp"
 #include "graphics/graphicsEngine.hpp"
 
-// TODO: Promotion
+// TODO: Promotion GUI
 // TODO: Optimization with bitboards
-// TODO: Optimization with not checking check twice (boardCalculator.cpp and engine.cpp)
-// TODO: Pawns don't trigger checks so you can capture king with pawn
 // TODO: Don't clear and refill queued renders every frame
+// TODO: Castles aren't recorded as moves
 int main()
 {
 	Engine chessEngine;

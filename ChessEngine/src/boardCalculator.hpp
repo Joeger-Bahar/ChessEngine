@@ -16,7 +16,7 @@ public:
 	// This gets moves for a piece, so it checks for checks as well
 	static std::vector<uint8_t> GetValidMoves(int row, int col, const Square board[8][8]);
 	// This is pseudo-legal moves, it does not check for checks, for faster engine calculations
-	static std::vector<uint8_t> GetAllMoves(Color color, const Square board[8][8]);
+	static std::vector<Move> GetAllMoves(Color color, const Square board[8][8]);
 
 private:
 	// These were generated with AI (ChatGPT 5)
