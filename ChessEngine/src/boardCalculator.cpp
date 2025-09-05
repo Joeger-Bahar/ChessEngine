@@ -23,78 +23,49 @@ bool BoardCalculator::IsSquareAttacked(int row, int col, Color byColor, const Sq
 		return false;
 
 	// 1. Pawns
-	int pawnDir = (byColor == Color::WHITE) ? 1 : -1; // White pawns attack up (-1), black down (+1)
-	int pawnRows[2] = { row + pawnDir, row + pawnDir };
-	int pawnCols[2] = { col - 1, col + 1 };
-	for (int i = 0; i < 2; i++)
-	{
-		if (InBounds(pawnRows[i], pawnCols[i]))
-		{
-			Piece p = board[pawnRows[i]][pawnCols[i]].GetPiece();
-			if (p.type == Pieces::PAWN && p.color == byColor)
-				return true;
-		}
+	int pawnDir = (byColor == Color::WHITE) ? 1 : 1;
+	if (InBounds(row + pawnDir, col - 1)) {
+		Piece p = board[row + pawnDir][col - 1].GetPiece();
+		if (p.type == Pieces::PAWN && p.color == byColor) return true;
+	}
+	if (InBounds(row + pawnDir, col + 1)) {
+		Piece p = board[row + pawnDir][col + 1].GetPiece();
+		if (p.type == Pieces::PAWN && p.color == byColor) return true;
 	}
 
 	// 2. Knights
-	for (int i = 0; i < 8; ++i)
-	{
+	for (int i = 0; i < 8; ++i) {
 		int r = row + knightOffsets[i][0], c = col + knightOffsets[i][1];
-		if (InBounds(r, c))
-		{
+		if (InBounds(r, c)) {
 			Piece p = board[r][c].GetPiece();
-			if (p.type == Pieces::KNIGHT && p.color == byColor)
-				return true;
+			if (p.type == Pieces::KNIGHT && p.color == byColor) return true;
 		}
 	}
 
-	// 3. Bishops / Queens (diagonals)
-	for (int i = 0; i < 4; ++i)
-	{
-		int dr = bishopDirs[i][0], dc = bishopDirs[i][1];
+	// 3. Sliding pieces (Rooks, Bishops, Queens)
+	for (int i = 0; i < 8; ++i) {
+		int dr = queenDirs[i][0], dc = queenDirs[i][1];
 		int r = row + dr, c = col + dc;
-		while (InBounds(r, c))
-		{
+		while (InBounds(r, c)) {
 			Piece p = board[r][c].GetPiece();
-			if (p.type != Pieces::NONE)
-			{
-				if (p.color == byColor &&
-					(p.type == Pieces::BISHOP || p.type == Pieces::QUEEN))
-					return true;
+			if (p.type != Pieces::NONE) {
+				if (p.color == byColor) {
+					bool isDiagonal = (dr != 0 && dc != 0);
+					if (p.type == Pieces::QUEEN || (p.type == Pieces::BISHOP && isDiagonal) || (p.type == Pieces::ROOK && !isDiagonal))
+						return true;
+				}
 				break; // Blocked
 			}
 			r += dr; c += dc;
 		}
 	}
 
-	// 4. Rooks / Queens (straights)
-	for (int i = 0; i < 4; ++i)
-	{
-		int dr = rookDirs[i][0], dc = rookDirs[i][1];
-		int r = row + dr, c = col + dc;
-		while (InBounds(r, c))
-		{
-			Piece p = board[r][c].GetPiece();
-			if (p.type != Pieces::NONE)
-			{
-				if (p.color == byColor &&
-					(p.type == Pieces::ROOK || p.type == Pieces::QUEEN))
-					return true;
-				break; // Blocked
-			}
-			r += dr; c += dc;
-		}
-	}
-
-	// 5. King
-	for (int i = 0; i < 8; ++i)
-	{
+	// 4. King
+	for (int i = 0; i < 8; ++i) {
 		int r = row + kingOffsets[i][0], c = col + kingOffsets[i][1];
-		if (InBounds(r, c))
-		{
+		if (InBounds(r, c)) {
 			Piece p = board[r][c].GetPiece();
-			if (p.type == Pieces::KING && p.color == byColor)
-				return true;
+			if (p.type == Pieces::KING && p.color == byColor) return true;
 		}
 	}
 
