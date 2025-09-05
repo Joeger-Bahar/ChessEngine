@@ -138,6 +138,7 @@
   <ItemGroup>
     <ClCompile Include="src\boardCalculator.cpp" />
     <ClCompile Include="src\engine.cpp" />
+    <ClCompile Include="src\gameState.cpp" />
     <ClCompile Include="src\graphics\graphicsEngine.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\move.cpp" />
@@ -147,6 +148,7 @@
   <ItemGroup>
     <ClInclude Include="src\boardCalculator.hpp" />
     <ClInclude Include="src\engine.hpp" />
+    <ClInclude Include="src\gameState.hpp" />
     <ClInclude Include="src\graphics\graphicsEngine.hpp" />
     <ClInclude Include="src\move.hpp" />
     <ClInclude Include="src\piece.hpp" />

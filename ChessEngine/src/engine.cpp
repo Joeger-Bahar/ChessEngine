@@ -3,6 +3,9 @@
 #include <iostream>
 #include <cmath>
 
+// Make GameState variables not need  prefix
+using namespace GameState;
+
 Engine::Engine()
 	: firstClick({ -1, -1 }), graphics()
 {
@@ -17,7 +20,6 @@ Engine::Engine(std::string fen)
 
 Engine::~Engine()
 {
-	std::cout << "Chess engine destroyed." << std::endl;
 }
 
 void Engine::LoadPosition(std::string fen)
@@ -56,44 +58,45 @@ void Engine::LoadPosition(std::string fen)
 
 	// Parse game state info
 	// After string sanitization, w KQkq - 0 1 turns into w-01
-	std::string gameState = fen.substr(gameStateIndex + 1);
-	if (gameState.length() < 4) return; // Invalid game state info
+	std::string fenGameState = fen.substr(gameStateIndex + 1);
+	if (fenGameState.length() < 4) return; // Invalid game state info
 	// Remove spaces
-	gameState.erase(remove(gameState.begin(), gameState.end(), ' '), gameState.end());
+	fenGameState.erase(remove(fenGameState.begin(), fenGameState.end(), ' '), fenGameState.end());
 	// Active color
-	currentPlayer = (gameState[0] == 'w') ? Color::WHITE : Color::BLACK;
+	currentPlayer = (fenGameState[0] == 'w') ? Color::WHITE : Color::BLACK;
 	// Castling rights
-	whiteCastlingRights[0] = (gameState.find('Q') != std::string::npos);
-	whiteCastlingRights[1] = (gameState.find('K') != std::string::npos);
-	blackCastlingRights[0] = (gameState.find('q') != std::string::npos);
-	blackCastlingRights[1] = (gameState.find('k') != std::string::npos);
+	whiteCastlingRights[0] = (fenGameState.find('Q') != std::string::npos);
+	whiteCastlingRights[1] = (fenGameState.find('K') != std::string::npos);
+	blackCastlingRights[0] = (fenGameState.find('q') != std::string::npos);
+	blackCastlingRights[1] = (fenGameState.find('k') != std::string::npos);
 	// Remove all castling notation from string
-	gameState.erase(remove_if(gameState.begin(), gameState.end(),
-		[](char ch) { return ch == 'K' || ch == 'Q' || ch == 'k' || ch == 'q'; }), gameState.end());
-	std::cout << "Game state info: " << gameState << std::endl;
+	fenGameState.erase(remove_if(fenGameState.begin(), fenGameState.end(),
+		[](char ch) { return ch == 'K' || ch == 'Q' || ch == 'k' || ch == 'q'; }), fenGameState.end());
+	
 	// En passant target, halfmoves and fullmoves
 	moveHistory.clear();
-	if (gameState[1] != '-') // If there is an en passant target
+	if (fenGameState[1] != '-') // If there is an en passant target
 	{
-		enPassantTarget[1] = gameState[1] - 'a'; // Column
-		enPassantTarget[0] = 8 - (gameState[2] - '0'); // Row
+		enPassantTarget[1] = fenGameState[1] - 'a'; // Column
+		enPassantTarget[0] = 8 - (fenGameState[2] - '0'); // Row
 
-		halfmoves = std::stoi(gameState.substr(3, 1));
+		halfmoves = std::stoi(fenGameState.substr(3, 1));
 
-		int fullmoves = std::stoi(gameState.substr(4));
-		for (int i = 0; i < fullmoves * 2; i++)
-			moveHistory.push_back(Move());
+		int fullmoves = std::stoi(fenGameState.substr(4));
+		//for (int i = 0; i < fullmoves * 2; i++)
+		//	moveHistory.push_back(Move());
 	}
 	else
 	{
 		enPassantTarget[0] = -1;
 		enPassantTarget[1] = -1;
 
-		halfmoves = std::stoi(gameState.substr(2, 1));
+		halfmoves = std::stoi(fenGameState.substr(2, 1));
 
-		int fullmoves = std::stoi(gameState.substr(3));
-		for (int i = 0; i < fullmoves * 2; i++)
-			moveHistory.push_back(Move());
+		int fullmoves = std::stoi(fenGameState.substr(3));
+		
+		//for (int i = 0; i < fullmoves * 2; i++)
+		//	moveHistory.push_back(Move());
 	}
 }
 
@@ -128,7 +131,7 @@ void Engine::Update()
 		// TODO: Store move with the result from a processinput function
 		if (!this->StoreMove()) continue; // No move to process
 		this->ProcessMove();
-		if (this->invalidMove) { this->invalidMove = false; continue; } // Invalid move, ask for input again
+		if (invalidMove) { invalidMove = false; continue; } // Invalid move, ask for input again
 		break;
 	}
 
@@ -142,7 +145,8 @@ bool Engine::StoreMove()
 	if (click.first == -2 && click.second == -2)
 	{
 		UndoMove();
-		ChangePlayers();
+		if (!invalidMove)
+			ChangePlayers();
 		return false;
 	}
 	// Check if -1, -1, and return
@@ -220,7 +224,7 @@ void Engine::ProcessMove()
 	if (notationMove == "O-O-O" || notationMove == "O-O")
 	{
 		HandleCastling();
-		if (this->invalidMove) return; // Invalid castling move
+		if (invalidMove) return; // Invalid castling move
 
 		return; // Successfully castled
 	}
@@ -231,7 +235,7 @@ void Engine::ProcessMove()
 		notationMove[2] < 'a' || notationMove[2] > 'h' ||
 		notationMove[3] < '1' || notationMove[3] > '8')
 	{
-		this->invalidMove = true;
+		invalidMove = true;
 		return;
 	}
 
@@ -251,7 +255,7 @@ void Engine::ProcessMove()
 		 || (this->board[move.endRow][move.endCol].GetPiece().GetColor() == currentPlayer) // Cannot capture own piece
 		 || (!ValidMove(movingPiece)))													   // Invalid move for the piece
 		{
-			this->invalidMove = true; 
+			invalidMove = true;
 			return;
 		}
 
@@ -265,6 +269,15 @@ void Engine::ProcessMove()
 			move.promotion = Pieces::QUEEN;
 		}
 		move.capturedPiece = targetPiece;
+		// En passant capture, assuming en passant was valid
+		// Piece was a pawn that moved diagonally to an empty square
+		if (movingPiece == Pieces::PAWN && targetPiece == Pieces::NONE && move.startCol != move.endCol)
+		{
+			int pawnRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
+			move.capturedPiece = board[pawnRow][move.endCol].GetPiece();
+			board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		}
+
 		moveHistory.push_back(move);
 
 		// Check if king is in check after move
@@ -272,7 +285,7 @@ void Engine::ProcessMove()
 		if (checkStatus == currentPlayer) // If the current player's king is in check after the move
 		{
 			UndoMove();
-			this->invalidMove = true;
+			invalidMove = true;
 			return;
 		}
 
@@ -390,6 +403,7 @@ void Engine::ProcessMove()
 	invalidMove = true;
 }
 
+// This doesn't do anything because notationMove isn't set to these at any point
 bool Engine::HandleSpecialNotation()
 {
 	if (notationMove == "resign")
@@ -407,7 +421,11 @@ bool Engine::HandleSpecialNotation()
 	else if (notationMove == "undo")
 	{
 		UndoMove();
-		ChangePlayers();
+		if (!invalidMove) // Only change players if undo was successful
+		{
+			ChangePlayers();
+			
+		}
 		return true;
 	}
 
@@ -422,7 +440,7 @@ void Engine::HandleCastling()
 	if ((currentPlayer == Color::WHITE && !whiteCastlingRights[kingside ? 1 : 0]) ||
 		(currentPlayer == Color::BLACK && !blackCastlingRights[kingside ? 1 : 0]))
 	{
-		this->invalidMove = true;
+		invalidMove = true;
 		return;
 	}
 
@@ -436,7 +454,7 @@ void Engine::HandleCastling()
 	if (board[row][kingColumn].GetPiece() != Piece(Pieces::KING, currentPlayer) ||
 		board[row][rookColumn].GetPiece() != Piece(Pieces::ROOK, currentPlayer))
 	{
-		this->invalidMove = true;
+		invalidMove = true;
 		return;
 	}
 	// Squares between king and rook not empty
@@ -446,7 +464,7 @@ void Engine::HandleCastling()
 	{
 		if (!board[row][kingColumn + (step * offset)].IsEmpty())
 		{
-			this->invalidMove = true;
+			invalidMove = true;
 			return;
 		}
 	}
@@ -576,7 +594,7 @@ void Engine::UndoMove()
 {
 	if (moveHistory.empty())
 	{
-		this->invalidMove = true; // No moves to undo
+		invalidMove = true; // No moves to undo
 		return;
 	}
 	// Undo last move

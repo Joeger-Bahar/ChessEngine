@@ -2,6 +2,8 @@
 
 #include <iostream>
 
+#include "gameState.hpp"
+
 // Define offsets and directions
 const int BoardCalculator::knightOffsets[8][2] = {
 	{2, 1}, {1, 2}, {-1, 2}, {-2, 1},
@@ -161,6 +163,7 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 		return {};
 	}
 
+	// Now filter out moves that would put or leave the king in check
 	std::vector<uint8_t> validMoves;
 	Square tempBoard[8][8];
 	memcpy(tempBoard, board, sizeof(Square) * 64);
@@ -181,6 +184,7 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 		if (kingRow != -1) break;
 	}
 
+	// Remove moves that put or leave king in check
 	for (int idx = 0; idx < 64; ++idx)
 	{
 		if (!moves[idx]) continue;
@@ -392,7 +396,12 @@ void BoardCalculator::AddPawnMoves(int row, int col, Color color, std::array<boo
 		}
 	}
 
-	// Note: En passant is not handled here
+	// En passant using enPassantTarget
+	if (GameState::enPassantTarget[0] == nr && abs(GameState::enPassantTarget[1] - col) == 1)
+	{
+		int epCol = GameState::enPassantTarget[1];
+		moves[nr * 8 + epCol] = true;
+	}
 }
 
 void BoardCalculator::AddKnightMoves(int row, int col, Color color, std::array<bool, 64>& moves, const Square board[8][8])
