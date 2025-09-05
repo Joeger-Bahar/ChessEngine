@@ -5,6 +5,7 @@
 // TODO: Optimization with bitboards
 // TODO: Optimization with not checking check twice (boardCalculator.cpp and engine.cpp)
 // TODO: Pawns don't trigger checks so you can capture king with pawn
+// TODO: Don't clear and refill queued renders every frame
 int main()
 {
 	Engine chessEngine;

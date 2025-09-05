@@ -1,5 +1,8 @@
 #include "boardCalculator.hpp"
 
+#include <algorithm>
+#include <iostream>
+
 // Define offsets and directions
 const int BoardCalculator::knightOffsets[8][2] = {
 	{2, 1}, {1, 2}, {-1, 2}, {-2, 1},
@@ -97,6 +100,7 @@ bool BoardCalculator::IsSquareAttacked(int row, int col, Color byColor, const Sq
 
 	return false; // No attackers found
 }
+
 
 bool BoardCalculator::InBounds(int row, int col)
 {
@@ -215,7 +219,7 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 		int destRow = idx / 8;
 		int destCol = idx % 8;
 		Piece movingPiece = tempBoard[row][col].GetPiece();
-		Piece capturedPiece = tempBoard[destCol][destCol].GetPiece();
+		Piece capturedPiece = tempBoard[destRow][destCol].GetPiece();
 		tempBoard[destRow][destCol].SetPiece(movingPiece);
 		tempBoard[row][col].SetPiece(Piece(Pieces::NONE, Color::NONE));
 
