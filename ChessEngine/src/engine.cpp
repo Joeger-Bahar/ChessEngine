@@ -18,9 +18,7 @@ Engine::Engine(std::string fen)
 		LoadPosition(fen);
 }
 
-Engine::~Engine()
-{
-}
+Engine::~Engine() {}
 
 void Engine::LoadPosition(std::string fen)
 {
@@ -105,7 +103,6 @@ void Engine::Render()
 	// If first click is valid highlight the square
 	if (firstClick.first != -1 && firstClick.second != -1)
 	{
-		//graphics.DrawSquareHighlight(firstClick.first, firstClick.second, { 0, 255, 0, 100 }); // Green highlight
 		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(firstClick.first, firstClick.second, { 0, 255, 0, 100 }); });
 
 		// Render the valid moves for the selected piece
@@ -121,26 +118,60 @@ void Engine::Render()
 	graphics.Render(board);
 }
 
+void Engine::ProcessWindowInput()
+{
+	std::pair<int, int> click = graphics.GetInputs(); // Returns the clicked row/col or a special code
+
+	if (click.first == -1 && click.second == -1)
+		return;
+
+	if (click.first == -2 && click.second == -2)
+	{
+		notationMove = "undo";
+	}
+}
+
 void Engine::Update()
 {
-	while (1) // Loop until a valid move is made
+	while (true) // Keep looping until we get a valid move
 	{
-		this->Render();
+		Render();
 
-		if (this->IsOver()) return; // Game over
-		// TODO: Store move with the result from a processinput function
-		if (!this->StoreMove()) continue; // No move to process
-		this->ProcessMove();
-		if (invalidMove) { invalidMove = false; continue; } // Invalid move, ask for input again
-		break;
+		if (IsOver())
+			return; // Game is finished
+
+		if (!StoreMove())
+			continue; // No full move was entered, keep asking
+
+		ProcessMove();
+
+		if (invalidMove)
+		{
+			invalidMove = false;
+			continue; // Move was structurally invalid
+		}
+
+		// Try to make the move
+		MakeMove();
+
+		CheckKingInCheck();
+		if (InCheck((currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE))
+		{
+			// Illegal: move leaves player in check
+			UndoMove();
+			continue; // Ask for input again
+		}
+
+		break; // Move was valid, exit loop
 	}
 
-	this->ChangePlayers();
+	// Update game state after move
+	CheckCheckmate();
 }
 
 bool Engine::StoreMove()
 {
-	std::pair<int, int> click = graphics.GetClick();
+	std::pair<int, int> click = graphics.GetInputs();
 	// -2 -2 for undo
 	if (click.first == -2 && click.second == -2)
 	{
@@ -186,11 +217,11 @@ bool Engine::StoreMove()
 		}
 
 		// Convert to notation
-		// If move is invalid it gets caught and handled
+		// If move is invalid it gets caught and handled in ProcessMove
 
 		// Check first for castling
-		if (board[firstClick.first][firstClick.second].GetPiece() == Pieces::KING &&
-			abs(firstClick.second - click.second) == 2 && firstClick.first == click.first)
+		if (board[firstClick.first][firstClick.second].GetPiece().GetType() == Pieces::KING &&
+			abs(firstClick.second - click.second) == 2 && firstClick.first == click.first) // Same row, 2 columns apart
 		{
 			if (click.second == 6) // Kingside
 				notationMove = "O-O";
@@ -201,6 +232,13 @@ bool Engine::StoreMove()
 				firstClick = { -1, -1 }; // Reset for next move
 				return false; // Invalid castling move, wait for new input
 			}
+			if (!BoardCalculator::IsCastlingValid(notationMove == "O-O", board))
+			{
+				firstClick = { -1, -1 }; // Reset for next move
+				invalidMove = true;
+				return false; // Move ready to process
+			}
+
 			firstClick = { -1, -1 }; // Reset for next move
 			return true; // Move ready to process
 		}
@@ -218,19 +256,18 @@ bool Engine::StoreMove()
 
 void Engine::ProcessMove()
 {
-	// Special commands
-	if (HandleSpecialNotation()) return;
-	
+	// Castling
 	if (notationMove == "O-O-O" || notationMove == "O-O")
 	{
-		HandleCastling();
-		if (invalidMove) return; // Invalid castling move
-
-		return; // Successfully castled
+		// Set start square to king and end square to 2 away
+		move.startRow = (currentPlayer == Color::WHITE) ? 7 : 0;
+		move.startCol = 4;
+		move.endRow = move.startRow;
+		move.endCol = (notationMove == "O-O") ? 6 : 2;
+		return;
 	}
 
-	// Outside bounds or invalid notation
-	else if (notationMove.length() != 4 || notationMove[0] < 'a' || notationMove[0] > 'h' ||
+	if (notationMove.length() != 4 || notationMove[0] < 'a' || notationMove[0] > 'h' ||
 		notationMove[1] < '1' || notationMove[1] > '8' ||
 		notationMove[2] < 'a' || notationMove[2] > 'h' ||
 		notationMove[3] < '1' || notationMove[3] > '8')
@@ -239,171 +276,97 @@ void Engine::ProcessMove()
 		return;
 	}
 
-	else
+	move.startCol = notationMove[0] - 'a'; // Convert 'a'-'h' to 0-7
+	move.startRow = 8 - (notationMove[1] - '0'); // Convert '1'-'8' to 7-0
+	move.endCol = notationMove[2] - 'a';
+	move.endRow = 8 - (notationMove[3] - '0');
+
+	Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
+
+	// Check valid move conditions
+	// Don't need out of bounds because 'i'-'z' and '9' aren't valid
+	if (!ValidMove(movingPiece)) // Invalid move for the piece
 	{
-		move.startCol = notationMove[0] - 'a'; // Convert 'a'-'h' to 0-7
-		move.startRow = 8 - (notationMove[1] - '0'); // Convert '1'-'8' to 7-0
-		move.endCol = notationMove[2] - 'a';
-		move.endRow = 8 - (notationMove[3] - '0');
+		invalidMove = true;
+		return;
+	}
+}
 
-		Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
-		Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
+void Engine::MakeMove()
+{
+	// 1. Save current info for undo
+	AppendUndoList();
 
-		// Check valid move conditions
-		// Don't need out of bounds because 'i'-'z' and '9' aren't valid
-		if ((movingPiece == Pieces::NONE || movingPiece.GetColor() != currentPlayer)       // No piece at the starting square or wrong color
-		 || (this->board[move.endRow][move.endCol].GetPiece().GetColor() == currentPlayer) // Cannot capture own piece
-		 || (!ValidMove(movingPiece)))													   // Invalid move for the piece
-		{
-			invalidMove = true;
-			return;
-		}
+	// 1. Move piece
+	Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
+	Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
 
-		// Make the move
-		board[move.endRow][move.endCol].SetPiece(movingPiece);
-		board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-		// Check for promotion
-		if (movingPiece == Pieces::PAWN && (move.endRow == 0 || move.endRow == 7))
-		{
-			board[move.endRow][move.endCol].SetPiece(Piece(Pieces::QUEEN, currentPlayer)); // Auto promote to queen
-			move.promotion = Pieces::QUEEN;
-		}
-		move.capturedPiece = targetPiece;
-		// En passant capture, assuming en passant was valid
-		// Piece was a pawn that moved diagonally to an empty square
-		if (movingPiece == Pieces::PAWN && targetPiece == Pieces::NONE && move.startCol != move.endCol)
-		{
-			int pawnRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
-			move.capturedPiece = board[pawnRow][move.endCol].GetPiece();
-			board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-		}
-
-		moveHistory.push_back(move);
-
-		// Check if king is in check after move
-		CheckKingInCheck();
-		if (checkStatus == currentPlayer) // If the current player's king is in check after the move
-		{
-			UndoMove();
-			invalidMove = true;
-			return;
-		}
-
-		// Check if rooks or king is moved to invalidate castling rights
-		if (movingPiece == Pieces::KING)
-		{
-			if (currentPlayer == Color::WHITE)
-			{
-				whiteKingPos = { move.endRow, move.endCol };
-				whiteCastlingRights[0] = false;
-				whiteCastlingRights[1] = false;
-			}
-			else
-			{
-				blackKingPos = { move.endRow, move.endCol };
-				blackCastlingRights[0] = false;
-				blackCastlingRights[1] = false;
-			}
-		}
-		else if (movingPiece == Pieces::ROOK)
-		{
-			if (currentPlayer == Color::WHITE)
-			{
-				if (move.startRow == 7 && move.startCol == 0) // a1 rook
-					whiteCastlingRights[0] = false;
-				else if (move.startRow == 7 && move.startCol == 7) // h1 rook
-					whiteCastlingRights[1] = false;
-			}
-			else
-			{
-				if (move.startRow == 0 && move.startCol == 0) // a8 rook
-					blackCastlingRights[0] = false;
-				else if (move.startRow == 0 && move.startCol == 7) // h8 rook
-					blackCastlingRights[1] = false;
-			}
-		}
-		// If rook is captured, invalidate castling rights
-		if (targetPiece == Pieces::ROOK)
-		{
-			if (currentPlayer == Color::WHITE)
-			{
-				if (move.endRow == 0 && move.endCol == 0) // a8 rook
-					blackCastlingRights[0] = false;
-				else if (move.endRow == 0 && move.endCol == 7) // h8 rook
-					blackCastlingRights[1] = false;
-			}
-			else
-			{
-				if (move.endRow == 7 && move.endCol == 0) // a1 rook
-					whiteCastlingRights[0] = false;
-				else if (move.endRow == 7 && move.endCol == 7) // h1 rook
-					whiteCastlingRights[1] = false;
-			}
-		}
-
-		// Check for en passant target
-		if (movingPiece == Pieces::PAWN && abs(move.endRow - move.startRow) == 2) // If pawn moved 2
-		{
-			enPassantTarget[0] = (move.startRow + move.endRow) / 2;
-			enPassantTarget[1] = move.startCol;
-		}
-		else // En passant opportunity only lasts for 1 turn
-		{
-			enPassantTarget[0] = -1;
-			enPassantTarget[1] = -1;
-		}
-
-		// TODO: Make this a function
-		// Update halfmove clock
-		if (movingPiece == Pieces::PAWN || targetPiece != Pieces::NONE)
-			halfmoves = 0;
+	board[move.endRow][move.endCol].SetPiece(movingPiece);
+	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+	move.capturedPiece = targetPiece;
+	// Update king position if needed
+	if (movingPiece.GetType() == Pieces::KING)
+	{
+		if (currentPlayer == Color::WHITE)
+			whiteKingPos = { move.endRow, move.endCol };
 		else
-			halfmoves++;
-		if (halfmoves >= 100) // 50-move rule
-		{
-			draw = true;
-			std::cout << "Game is a draw by the 50-move rule!\n";
-			return;
-		}
-		// Check if opponent has any valid moves for checkmate + stalemate
-		bool opponentHasMoves = false;
-		Color opponent = (currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE;
-		for (int r = 0; r < 8; r++)
-		{
-			for (int c = 0; c < 8; c++)
-			{
-				Piece p = board[r][c].GetPiece();
-				if (p != Pieces::NONE && p.GetColor() == opponent)
-				{
-					std::vector<uint8_t> moves = BoardCalculator::GetValidMoves(r, c, board);
-					if (!moves.empty())
-					{
-						opponentHasMoves = true;
-						break;
-					}
-				}
-			}
-			if (opponentHasMoves) break;
-		}
-		if (!opponentHasMoves)
-		{
-			if (checkStatus == Color::NONE) // Stalemate
-			{
-				draw = true;
-				std::cout << "Game is a draw by stalemate!\n";
-				return;
-			}
-			checkmate = true;
-			std::cout << ((currentPlayer == Color::WHITE) ? "White" : "Black") << " wins by checkmate!\n";
-		}
+			blackKingPos = { move.endRow, move.endCol };
+	}
 
+	// 3. Castling rights
+	UpdateCastlingRights(movingPiece, targetPiece);
+	// Handle castling
+	if (movingPiece.GetType() == Pieces::KING && abs(move.startCol - move.endCol) == 2)
+	{
+		bool kingside = (move.endCol == 6);
+		int row = (currentPlayer == Color::WHITE) ? 7 : 0;
+		int rookStartCol = kingside ? 7 : 0;
+		int rookEndCol = kingside ? 5 : 3;
+		// Move rook
+		board[row][rookEndCol].SetPiece(board[row][rookStartCol].GetPiece());
+		board[row][rookStartCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		// Update king position
+		if (currentPlayer == Color::WHITE)
+			whiteKingPos = { row, move.endCol };
+		else
+			blackKingPos = { row, move.endCol };
+	}
+
+	// 4. En passant sqaure/capture
+	UpdateEnPassantSquare(movingPiece);
+	// Check for capture
+	if (movingPiece.GetType() == Pieces::PAWN && targetPiece.GetType() == Pieces::NONE && move.startCol != move.endCol)
+	{
+		int pawnRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
+		move.capturedPiece = board[pawnRow][move.endCol].GetPiece();
+		board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+	}
+
+	// 5. Pawn promotion
+	if (movingPiece.GetType() == Pieces::PAWN && (move.endRow == 0 || move.endRow == 7))
+	{
+		board[move.endRow][move.endCol].SetPiece(Piece(Pieces::QUEEN, currentPlayer)); // Auto promote to queen
+		move.promotion = Pieces::QUEEN;
+	}
+
+	// 6. Halfmove clock
+	if (movingPiece.GetType() == Pieces::PAWN || targetPiece.GetType() != Pieces::NONE)
+		halfmoves = 0;
+	else
+		halfmoves++;
+	if (halfmoves >= 100) // 50-move rule
+	{
+		draw = true;
+		std::cout << "Game is a draw by the 50-move rule!\n";
 		return;
 	}
 
-	invalidMove = true;
+	// 7. Save move
+	moveHistory.push_back(move);
+	// 2. Change side to move
+	ChangePlayers();
 }
 
-// This doesn't do anything because notationMove isn't set to these at any point
 bool Engine::HandleSpecialNotation()
 {
 	if (notationMove == "resign")
@@ -422,67 +385,12 @@ bool Engine::HandleSpecialNotation()
 	{
 		UndoMove();
 		if (!invalidMove) // Only change players if undo was successful
-		{
 			ChangePlayers();
-			
-		}
+	
 		return true;
 	}
 
 	return false;
-}
-
-void Engine::HandleCastling()
-{
-	bool kingside = (notationMove == "O-O");
-
-	// Check if castling is allowed
-	if ((currentPlayer == Color::WHITE && !whiteCastlingRights[kingside ? 1 : 0]) ||
-		(currentPlayer == Color::BLACK && !blackCastlingRights[kingside ? 1 : 0]))
-	{
-		invalidMove = true;
-		return;
-	}
-
-	int row = (currentPlayer == Color::WHITE) ? 7 : 0; // Row 7 for white, 0 for black
-	int rookColumn = (kingside) ? 7 : 0;
-	int kingColumn = 4; // Only used to avoid '4' as a pseudo magic number
-	// +1 or -1, used for stepping to check missing pieces and to move rook and king to correct space
-	int step = (kingside) ? 1 : -1; // -1 for queenside (down the columns), 1 for kingside
-
-	// King or rook not in starting position					// Color of piece
-	if (board[row][kingColumn].GetPiece() != Piece(Pieces::KING, currentPlayer) ||
-		board[row][rookColumn].GetPiece() != Piece(Pieces::ROOK, currentPlayer))
-	{
-		invalidMove = true;
-		return;
-	}
-	// Squares between king and rook not empty
-	// Only need to check 2 squares for kingside castling (f1/f8 and g1/g8)
-	int squaresToCheck = kingside ? 2 : 3;
-	for (int offset = 1; offset <= squaresToCheck; offset++)
-	{
-		if (!board[row][kingColumn + (step * offset)].IsEmpty())
-		{
-			invalidMove = true;
-			return;
-		}
-	}
-
-	// Perform castling
-	// Move king to c1/c8 or g1/g8 (two up or down from the kings original position)
-	board[row][kingColumn + (step * 2)].SetPiece(board[row][kingColumn].GetPiece());
-	board[row][kingColumn].SetPiece(Piece(Pieces::NONE, Color::NONE)); // Clear original king square
-
-	// Update king position
-	if (currentPlayer == Color::WHITE)
-		whiteKingPos = { row, kingColumn + (step * 2) };
-	else
-		blackKingPos = { row, kingColumn + (step * 2) };
-
-	// Move rook to d1/d8 or f1/f8 (one up or down from the kings original position)
-	board[row][kingColumn + step].SetPiece(board[row][rookColumn].GetPiece());
-	board[row][rookColumn].SetPiece(Piece(Pieces::NONE, Color::NONE)); // Clear original rook square
 }
 
 //void Engine::Benchmark()
@@ -526,7 +434,7 @@ std::string Engine::GetFEN() const
 		for (int j = 0; j < 8; ++j)
 		{
 			Piece piece = board[i][j].GetPiece();
-			if (piece == Pieces::NONE)
+			if (piece.GetType() == Pieces::NONE)
 			{
 				emptyCount++;
 			}
@@ -538,7 +446,7 @@ std::string Engine::GetFEN() const
 					emptyCount = 0;
 				}
 				char pieceChar;
-				switch (piece)
+				switch (piece.GetType())
 				{
 				case Pieces::KING:   pieceChar = 'k'; break;
 				case Pieces::QUEEN:  pieceChar = 'q'; break;
@@ -592,19 +500,30 @@ std::string Engine::GetFEN() const
 
 void Engine::UndoMove()
 {
+	std::cout << "Undoing move\n";
 	if (moveHistory.empty())
 	{
 		invalidMove = true; // No moves to undo
 		return;
 	}
+
 	// Undo last move
 	move = moveHistory.back();
 	moveHistory.pop_back();
 	Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
 	if (move.promotion != Pieces::NONE) // If it was a promotion, revert to pawn
 		movingPiece = Piece(Pieces::PAWN, movingPiece.GetColor());
+
 	board[move.startRow][move.startCol].SetPiece(movingPiece);
 	board[move.endRow][move.endCol].SetPiece(move.capturedPiece); // Restore captured piece, if any
+
+	if (movingPiece.GetType() == Pieces::KING)
+	{
+		if (movingPiece.GetColor() == Color::WHITE)
+			whiteKingPos = { move.startRow, move.startCol };
+		else if (movingPiece.GetColor() == Color::BLACK)
+			blackKingPos = { move.startRow, move.startCol };
+	}
 }
 
 void Engine::CheckKingInCheck()
@@ -615,4 +534,117 @@ void Engine::CheckKingInCheck()
 		checkStatus = Color::BLACK;
 	else
 		checkStatus = Color::NONE;
+}
+
+void Engine::UpdateCastlingRights(Piece movingPiece, Piece targetPiece)
+{
+	// If neither side can castle, no need to check
+	if (!whiteCastlingRights[0] && !whiteCastlingRights[1] &&
+		!blackCastlingRights[0] && !blackCastlingRights[1])
+		return;
+
+	if (movingPiece.GetType() == Pieces::KING)
+	{
+		if (currentPlayer == Color::WHITE)
+		{
+			whiteKingPos = { move.endRow, move.endCol };
+			whiteCastlingRights[0] = false;
+			whiteCastlingRights[1] = false;
+		}
+		else
+		{
+			blackKingPos = { move.endRow, move.endCol };
+			blackCastlingRights[0] = false;
+			blackCastlingRights[1] = false;
+		}
+	}
+	else if (movingPiece.GetType() == Pieces::ROOK)
+	{
+		if (currentPlayer == Color::WHITE)
+		{
+			if (move.startRow == 7 && move.startCol == 0) // a1 rook
+				whiteCastlingRights[0] = false;
+			else if (move.startRow == 7 && move.startCol == 7) // h1 rook
+				whiteCastlingRights[1] = false;
+		}
+		else
+		{
+			if (move.startRow == 0 && move.startCol == 0) // a8 rook
+				blackCastlingRights[0] = false;
+			else if (move.startRow == 0 && move.startCol == 7) // h8 rook
+				blackCastlingRights[1] = false;
+		}
+	}
+	// If rook is captured, invalidate castling rights
+	if (targetPiece.GetType() == Pieces::ROOK)
+	{
+		if (currentPlayer == Color::WHITE)
+		{
+			if (move.endRow == 0 && move.endCol == 0) // a8 rook
+				blackCastlingRights[0] = false;
+			else if (move.endRow == 0 && move.endCol == 7) // h8 rook
+				blackCastlingRights[1] = false;
+		}
+		else
+		{
+			if (move.endRow == 7 && move.endCol == 0) // a1 rook
+				whiteCastlingRights[0] = false;
+			else if (move.endRow == 7 && move.endCol == 7) // h1 rook
+				whiteCastlingRights[1] = false;
+		}
+	}
+}
+
+void Engine::UpdateEnPassantSquare(Piece movingPiece)
+{
+	if (movingPiece.GetType() == Pieces::PAWN && abs(move.endRow - move.startRow) == 2) // If pawn moved 2
+	{
+		enPassantTarget[0] = (move.startRow + move.endRow) / 2;
+		enPassantTarget[1] = move.startCol;
+	}
+	else // En passant opportunity only lasts for 1 turn
+	{
+		enPassantTarget[0] = -1;
+		enPassantTarget[1] = -1;
+	}
+}
+
+void Engine::AppendUndoList()
+{
+}
+
+void Engine::CheckCheckmate()
+{
+	bool hasMoves = false;
+	
+	for (int r = 0; r < 8; r++)
+	{
+		for (int c = 0; c < 8; c++)
+		{
+			Piece p = board[r][c].GetPiece();
+			if (p.GetType() == Pieces::NONE || p.GetColor() != currentPlayer) // Empty or opponent's piece
+				continue;
+
+			std::vector<uint8_t> moves = BoardCalculator::GetValidMoves(r, c, board);
+			if (!moves.empty())
+			{
+				hasMoves = true;
+				break;
+			}
+		}
+
+		if (hasMoves) break;
+	}
+	if (!hasMoves)
+	{
+		if (checkStatus == Color::NONE) // Stalemate
+		{
+			draw = true;
+			std::cout << "Game is a draw by stalemate!\n";
+			return;
+		}
+		checkmate = true;
+		// Current player in checkmate
+		std::cout << ((currentPlayer == Color::WHITE) ? "Black" : "White") << " wins by checkmate!\n";
+	}
 }

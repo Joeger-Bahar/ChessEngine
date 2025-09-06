@@ -25,5 +25,5 @@ void Square::SetColor(Color c)
 
 bool Square::IsEmpty() const
 {
-	return piece.type == Pieces::NONE;
+	return piece.GetType() == Pieces::NONE;
 }

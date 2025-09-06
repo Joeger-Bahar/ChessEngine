@@ -18,10 +18,14 @@ enum class Pieces {
 
 struct Piece {
 	Piece(Pieces t = Pieces::NONE, Color c = Color::NONE);
-	// Overloader to return piece type when used in an expression
-	operator Pieces() const;
+	// Comparison operators
+	friend bool operator==(const Piece& a, const Piece& b) {
+		return a.type == b.type && a.color == b.color;
+	}
 
 	Color GetColor() const;
+	Pieces GetType() const;
+	const char* ToString() const;
 
 	Pieces type;
 	Color color;

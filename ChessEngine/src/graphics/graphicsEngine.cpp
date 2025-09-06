@@ -58,10 +58,11 @@ void GraphicsEngine::RenderPieces(Square board[8][8])
 		for (int j = 0; j < 8; ++j)
 		{
 			Piece piece = board[i][j].GetPiece();
-			if (piece == Pieces::NONE) continue; // No piece to draw
+			if (piece.GetType() == Pieces::NONE) continue; // No piece to draw
 
 			int pieceIndex = -1;
-			switch (piece) {
+			switch (piece.GetType())
+			{
 			case Pieces::KING:   pieceIndex = (piece.GetColor() == Color::WHITE) ? 0 : 6; break;
 			case Pieces::QUEEN:  pieceIndex = (piece.GetColor() == Color::WHITE) ? 1 : 7; break;
 			case Pieces::BISHOP: pieceIndex = (piece.GetColor() == Color::WHITE) ? 2 : 8; break;
@@ -80,24 +81,28 @@ void GraphicsEngine::RenderPieces(Square board[8][8])
 	}
 }
 
-std::pair<int, int> GraphicsEngine::GetClick()
+std::pair<int, int> GraphicsEngine::GetInputs()
 {
 	SDL_Event event;
-	while (SDL_PollEvent(&event)) {
-		if (event.type == SDL_QUIT) {
+	while (SDL_PollEvent(&event))
+	{
+		if (event.type == SDL_QUIT)
+		{
 			exit(0); // Exit the program if the window is closed
 		}
-		else if (event.type == SDL_MOUSEBUTTONDOWN) {
+		else if (event.type == SDL_MOUSEBUTTONDOWN)
+		{
 			int x = event.button.x;
 			int y = event.button.y;
 			int col = x / 75; // Each square is 75 pixels wide
 			int row = y / 75; // Each square is 75 pixels tall
-			if (col >= 0 && col < 8 && row >= 0 && row < 8) {
+			if (col >= 0 && col < 8 && row >= 0 && row < 8)
 				return { row, col };
-			}
 		}
-		else if (event.type == SDL_KEYDOWN) { // Left arrow for undo
-			if (event.key.keysym.sym == SDLK_LEFT) {
+		else if (event.type == SDL_KEYDOWN) // Left arrow for undo
+		{
+			if (event.key.keysym.sym == SDLK_LEFT)
+			{
 				return { -2, -2 }; // Special code for undo
 			}
 		}

@@ -23,17 +23,26 @@ public:
 	//void Benchmark();
 
 private:
-	void LoadPosition(std::string fen);
 	void Render();
+	void ProcessWindowInput();
 	bool StoreMove(); // Returns if there was a second click to make a move
-	void ProcessMove();
+	void ProcessMove(); // Validates move
+	void MakeMove();
 	bool HandleSpecialNotation(); // Returns if there was notation or not
-	void HandleCastling();
 	bool ValidMove(const Piece piece); // Checks if the move is valid for the piece
-	std::string GetFEN() const; // Get current position in FEN notation
 	void UndoMove();
+
 	void CheckKingInCheck(); // Sets checkStatus
+	void UpdateCastlingRights(Piece movingPiece, Piece targetPiece);
+	void UpdateEnPassantSquare(Piece movingPiece);
+	void AppendUndoList();
+	void CheckCheckmate();
+
+
+	std::string GetFEN() const; // Get current position in FEN notation
+	void LoadPosition(std::string fen);
 	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
+	inline bool InCheck(Color color) { return GameState::checkStatus == color; }
 
 	std::vector<Move> moveHistory;
 	Square board[8][8];

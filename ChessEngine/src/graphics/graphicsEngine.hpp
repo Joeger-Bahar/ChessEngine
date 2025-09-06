@@ -17,7 +17,7 @@ public:
 	void Render(Square board[8][8]);
 	void RenderBoard(Square board[8][8]);
 	void RenderPieces(Square board[8][8]);
-	std::pair<int, int> GetClick(); // Returns {row, col} of clicked square, or {-1, -1} if none
+	std::pair<int, int> GetInputs(); // Returns {row, col} of clicked square, or {-1, -1} if none
 	template <typename F>
 	void QueueRender(F&& func);
 	void DrawSquareHighlight(int row, int col, SDL_Color color); // Highlight a square (for showing selected piece, valid moves, etc.)
