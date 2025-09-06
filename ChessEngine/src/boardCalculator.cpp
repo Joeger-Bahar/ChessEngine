@@ -207,7 +207,7 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 								move.endRow = endRow;
 								move.endCol = endCol;
 								move.capturedPiece = board[endRow][endCol].GetPiece();
-								move.promotion = promo;
+								move.promotion = Piece(promo, color);
 								moves.push_back(move);
 							}
 						}

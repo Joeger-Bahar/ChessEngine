@@ -355,7 +355,7 @@ void Engine::MakeMove()
 	if (movingPiece.GetType() == Pieces::PAWN && (move.endRow == 0 || move.endRow == 7))
 	{
 		board[move.endRow][move.endCol].SetPiece(Piece(Pieces::QUEEN, currentPlayer)); // Auto promote to queen
-		move.promotion = Pieces::QUEEN;
+		move.promotion = Piece(Pieces::QUEEN, currentPlayer);
 	}
 
 	// 6. Halfmove clock
@@ -507,7 +507,7 @@ std::string Engine::GetFEN() const
 
 void Engine::UndoMove()
 {
-	if (undoHistory.empty())
+	if (undoHistory.size() <= 1) // Last move is the initial position, can't undo
 	{
 		invalidMove = true;
 		return; // No move to undo
@@ -526,10 +526,11 @@ void Engine::UndoMove()
 	int toRow = lastState.toSquare / 8;
 	int toCol = lastState.toSquare % 8;
 
-	// Can't restore to previous move because 
-	Piece movedPiece = lastState.movedPiece;
+	// Can't restore to previous move because
+					// Variable is managed in a way that converts from 0-6 to Piece
+	Piece movedPiece = Piece(static_cast<Pieces>(lastState.movedPiece), player);
 	board[fromRow][fromCol].SetPiece(movedPiece);
-	board[toRow][toCol].SetPiece(lastState.capturedPiece);
+	board[toRow][toCol].SetPiece(Piece(static_cast<Pieces>(lastState.capturedPiece), enemy));
 
 	// Restore king position if needed
 	if (movedPiece.GetType() == Pieces::KING)
@@ -679,9 +680,9 @@ void Engine::UpdateEnPassantSquare(const Piece movingPiece)
 void Engine::AppendUndoList(const Piece movingPiece)
 {
 	BoardState state;
-	state.capturedPiece = move.capturedPiece;
-	state.movedPiece = movingPiece;
-	state.promotion = move.promotion;
+	state.capturedPiece = static_cast<int>(move.capturedPiece.GetType());
+	state.movedPiece = static_cast<int>(movingPiece.GetType());
+	state.promotion = static_cast<int>(move.promotion.GetType());
 	state.fromSquare = move.startRow * 8 + move.startCol;
 	state.toSquare = move.endRow * 8 + move.endCol;
 	state.enPassantTarget = (enPassantTarget[0] == -1) ? 64 : (enPassantTarget[0] * 8 + enPassantTarget[1]);
