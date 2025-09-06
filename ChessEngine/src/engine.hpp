@@ -7,9 +7,10 @@
 #include "piece.hpp"
 #include "square.hpp"
 #include "move.hpp"
-#include "graphics/graphicsEngine.hpp"
 #include "boardCalculator.hpp"
 #include "gameState.hpp"
+
+#include "graphics/graphicsEngine.hpp"
 
 class Engine
 {
@@ -33,9 +34,9 @@ private:
 	void UndoMove();
 
 	void CheckKingInCheck(); // Sets checkStatus
-	void UpdateCastlingRights(Piece movingPiece, Piece targetPiece);
-	void UpdateEnPassantSquare(Piece movingPiece);
-	void AppendUndoList();
+	void UpdateCastlingRights(const Piece movingPiece, const Piece targetPiece);
+	void UpdateEnPassantSquare(const Piece movingPiece);
+	void AppendUndoList(const Piece movingPiece);
 	void CheckCheckmate();
 
 
@@ -45,6 +46,7 @@ private:
 	inline bool InCheck(Color color) { return GameState::checkStatus == color; }
 
 	std::vector<Move> moveHistory;
+	std::vector<BoardState> undoHistory;
 	Square board[8][8];
 	GraphicsEngine graphics;
 	std::string notationMove; // Clicks are converted to notation

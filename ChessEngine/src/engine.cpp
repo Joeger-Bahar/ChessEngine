@@ -10,12 +10,14 @@ Engine::Engine()
 	: firstClick({ -1, -1 }), graphics()
 {
 	LoadPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+	AppendUndoList(Piece());
 }
 
 Engine::Engine(std::string fen)
 	: firstClick({ -1, -1 }), graphics()
 {
-		LoadPosition(fen);
+	LoadPosition(fen);
+	AppendUndoList(Piece());
 }
 
 Engine::~Engine() {}
@@ -73,6 +75,7 @@ void Engine::LoadPosition(std::string fen)
 	
 	// En passant target, halfmoves and fullmoves
 	moveHistory.clear();
+	undoHistory.clear();
 	if (fenGameState[1] != '-') // If there is an en passant target
 	{
 		enPassantTarget[1] = fenGameState[1] - 'a'; // Column
@@ -113,6 +116,12 @@ void Engine::Render()
 			int col = move % 8;
 			graphics.QueueRender([=]() { graphics.DrawSquareHighlight(row, col, { 0, 0, 255, 100 }); }); // Blue highlight
 		}
+	}
+	// Highlight king if in check
+	if (checkStatus != Color::NONE)
+	{
+		std::pair<int, int> kingPos = (checkStatus == Color::WHITE) ? whiteKingPos : blackKingPos;
+		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(kingPos.first, kingPos.second, { 255, 0, 0, 100 }); }); // Red highlight
 	}
 
 	graphics.Render(board);
@@ -176,8 +185,6 @@ bool Engine::StoreMove()
 	if (click.first == -2 && click.second == -2)
 	{
 		UndoMove();
-		if (!invalidMove)
-			ChangePlayers();
 		return false;
 	}
 	// Check if -1, -1, and return
@@ -294,16 +301,18 @@ void Engine::ProcessMove()
 
 void Engine::MakeMove()
 {
-	// 1. Save current info for undo
-	AppendUndoList();
+	const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
+	const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
 
 	// 1. Move piece
-	Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
-	Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
-
 	board[move.endRow][move.endCol].SetPiece(movingPiece);
 	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 	move.capturedPiece = targetPiece;
+	// 2. Save state to undo list
+	// Here so when the move ^ is undone, it will be complimented with the current state
+	// The move above will be undone, but the game state will be applied
+	AppendUndoList(movingPiece);
+
 	// Update king position if needed
 	if (movingPiece.GetType() == Pieces::KING)
 	{
@@ -352,9 +361,9 @@ void Engine::MakeMove()
 	// 6. Halfmove clock
 	if (movingPiece.GetType() == Pieces::PAWN || targetPiece.GetType() != Pieces::NONE)
 		halfmoves = 0;
-	else
+	else if (currentPlayer == Color::BLACK)
 		halfmoves++;
-	if (halfmoves >= 100) // 50-move rule
+	if (halfmoves >= 50) // 50-move rule
 	{
 		draw = true;
 		std::cout << "Game is a draw by the 50-move rule!\n";
@@ -363,7 +372,8 @@ void Engine::MakeMove()
 
 	// 7. Save move
 	moveHistory.push_back(move);
-	// 2. Change side to move
+
+	// 8. Change side to move
 	ChangePlayers();
 }
 
@@ -384,9 +394,6 @@ bool Engine::HandleSpecialNotation()
 	else if (notationMove == "undo")
 	{
 		UndoMove();
-		if (!invalidMove) // Only change players if undo was successful
-			ChangePlayers();
-	
 		return true;
 	}
 
@@ -500,30 +507,90 @@ std::string Engine::GetFEN() const
 
 void Engine::UndoMove()
 {
-	std::cout << "Undoing move\n";
-	if (moveHistory.empty())
+	if (undoHistory.empty())
 	{
-		invalidMove = true; // No moves to undo
-		return;
+		invalidMove = true;
+		return; // No move to undo
 	}
 
-	// Undo last move
-	move = moveHistory.back();
-	moveHistory.pop_back();
-	Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
-	if (move.promotion != Pieces::NONE) // If it was a promotion, revert to pawn
-		movingPiece = Piece(Pieces::PAWN, movingPiece.GetColor());
+	//undoHistory.pop_back();
+	BoardState lastState = undoHistory.back();
+	undoHistory.pop_back();
 
-	board[move.startRow][move.startCol].SetPiece(movingPiece);
-	board[move.endRow][move.endCol].SetPiece(move.capturedPiece); // Restore captured piece, if any
+	Color player = lastState.playerToMove ? Color::WHITE : Color::BLACK;
+	Color enemy = (player == Color::WHITE) ? Color::BLACK : Color::WHITE;
 
-	if (movingPiece.GetType() == Pieces::KING)
+	// Restore pieces
+	int fromRow = lastState.fromSquare / 8;
+	int fromCol = lastState.fromSquare % 8;
+	int toRow = lastState.toSquare / 8;
+	int toCol = lastState.toSquare % 8;
+
+	// Can't restore to previous move because 
+	Piece movedPiece = lastState.movedPiece;
+	board[fromRow][fromCol].SetPiece(movedPiece);
+	board[toRow][toCol].SetPiece(lastState.capturedPiece);
+
+	// Restore king position if needed
+	if (movedPiece.GetType() == Pieces::KING)
 	{
-		if (movingPiece.GetColor() == Color::WHITE)
-			whiteKingPos = { move.startRow, move.startCol };
-		else if (movingPiece.GetColor() == Color::BLACK)
-			blackKingPos = { move.startRow, move.startCol };
+		if (player == Color::WHITE)
+			whiteKingPos = { fromRow, fromCol };
+		else
+			blackKingPos = { fromRow, fromCol };
 	}
+
+	// Handle en passant capture
+	if (lastState.wasEnPassant)
+	{
+		int pawnRow = (player == Color::WHITE) ? toRow + 1 : toRow - 1;
+		board[pawnRow][toCol].SetPiece(Piece(Pieces::PAWN, enemy));
+		board[toRow][toCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+	}
+
+	// Handle castling
+	if (lastState.wasCastling)
+	{
+		bool kingside = (toCol == 6);
+		int row = (player == Color::WHITE) ? 7 : 0;
+		int rookStartCol = kingside ? 7 : 0;
+		int rookEndCol = kingside ? 5 : 3;
+		board[row][rookStartCol].SetPiece(board[row][rookEndCol].GetPiece());
+		board[row][rookEndCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		// King position was updated earlier
+	}
+
+	// Restore en passant target square
+	if (lastState.enPassantTarget == 64)
+	{
+		enPassantTarget[0] = -1;
+		enPassantTarget[1] = -1;
+	}
+	else
+	{
+		enPassantTarget[0] = lastState.enPassantTarget / 8;
+		enPassantTarget[1] = lastState.enPassantTarget % 8;
+	}
+
+	// Restore castling rights
+	whiteCastlingRights[0] = (lastState.castlingRights & 0b1000) != 0;
+	whiteCastlingRights[1] = (lastState.castlingRights & 0b0100) != 0;
+	blackCastlingRights[0] = (lastState.castlingRights & 0b0010) != 0;
+	blackCastlingRights[1] = (lastState.castlingRights & 0b0001) != 0;
+
+	// Restore halfmove clock
+	halfmoves = lastState.halfmoveClock;
+
+	// Remove last move from history
+	if (!moveHistory.empty())
+		moveHistory.pop_back();
+
+	// Reset if game ended
+	invalidMove = false;
+	checkmate = false;
+	draw = false;
+
+	currentPlayer = player;
 }
 
 void Engine::CheckKingInCheck()
@@ -536,7 +603,7 @@ void Engine::CheckKingInCheck()
 		checkStatus = Color::NONE;
 }
 
-void Engine::UpdateCastlingRights(Piece movingPiece, Piece targetPiece)
+void Engine::UpdateCastlingRights(const Piece movingPiece, const Piece targetPiece)
 {
 	// If neither side can castle, no need to check
 	if (!whiteCastlingRights[0] && !whiteCastlingRights[1] &&
@@ -595,7 +662,7 @@ void Engine::UpdateCastlingRights(Piece movingPiece, Piece targetPiece)
 	}
 }
 
-void Engine::UpdateEnPassantSquare(Piece movingPiece)
+void Engine::UpdateEnPassantSquare(const Piece movingPiece)
 {
 	if (movingPiece.GetType() == Pieces::PAWN && abs(move.endRow - move.startRow) == 2) // If pawn moved 2
 	{
@@ -609,8 +676,23 @@ void Engine::UpdateEnPassantSquare(Piece movingPiece)
 	}
 }
 
-void Engine::AppendUndoList()
+void Engine::AppendUndoList(const Piece movingPiece)
 {
+	BoardState state;
+	state.capturedPiece = move.capturedPiece;
+	state.movedPiece = movingPiece;
+	state.promotion = move.promotion;
+	state.fromSquare = move.startRow * 8 + move.startCol;
+	state.toSquare = move.endRow * 8 + move.endCol;
+	state.enPassantTarget = (enPassantTarget[0] == -1) ? 64 : (enPassantTarget[0] * 8 + enPassantTarget[1]);
+	state.castlingRights = (whiteCastlingRights[0] << 3) | (whiteCastlingRights[1] << 2) |
+		(blackCastlingRights[0] << 1) | (blackCastlingRights[1]);
+	state.halfmoveClock = halfmoves;
+	state.wasEnPassant = (movingPiece.GetType() == Pieces::PAWN &&
+		move.capturedPiece.GetType() == Pieces::NONE && move.startCol != move.endCol);
+	state.wasCastling = (movingPiece.GetType() == Pieces::KING && abs(move.startCol - move.endCol) == 2);
+	state.playerToMove = (currentPlayer == Color::WHITE);
+	undoHistory.push_back(state);
 }
 
 void Engine::CheckCheckmate()
