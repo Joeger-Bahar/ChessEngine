@@ -1,7 +1,9 @@
 ﻿#include "engine.hpp"
+#include "bot/bot.hpp"
 
 #include <iostream>
 #include <cmath>
+#include <Windows.h>
 
 // Make GameState variables not need  prefix
 using namespace GameState;
@@ -149,6 +151,13 @@ void Engine::Update()
 
 		if (IsOver())
 			return; // Game is finished
+
+		if (botPlaying && currentPlayer == bot->GetColor())
+		{
+			move = bot->GetMove();
+			MakeMove(move);
+			break;
+		}
 
 		if (!StoreMove())
 			continue; // No full move was entered, keep asking
@@ -606,6 +615,12 @@ void Engine::UndoMove()
 	draw = false;
 
 	currentPlayer = player;
+}
+
+void Engine::SetBot(Bot* bot)
+{
+	this->bot = bot;
+	botPlaying = (bot != nullptr);
 }
 
 void Engine::CheckKingInCheck()

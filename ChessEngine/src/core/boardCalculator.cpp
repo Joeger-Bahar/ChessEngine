@@ -176,6 +176,7 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 			Piece piece = board[i][j].GetPiece();
 			if (piece.GetType() == Pieces::NONE || piece.GetColor() != color) continue; // No piece or wrong color
 
+
 			std::array<bool, 64> pieceMoves = { false };
 
 			// Generate moves for the piece
@@ -211,11 +212,10 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 							}
 						}
 					}
+					continue; // Skip default pawn move gen
 				}
-
-				continue; // Skip default pawn move gen
+				break;
 			}
-
 			case Pieces::KNIGHT:
 				AddKnightMoves(i, j, color, pieceMoves, board);
 				break;
@@ -246,6 +246,8 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 					moves.push_back(move);
 				}
 			}
+
+			//std::cout << "Found " << moves.size() << " moves for piece at " << i << "," << j << "\n";
 		}
 	}
 
@@ -344,6 +346,7 @@ void BoardCalculator::AddPawnMoves(int row, int col, Color color, std::array<boo
 			int nnr = row + 2 * dir;
 			if (0 <= nnr && nnr < 8 && board[nnr][col].GetPiece().GetType() == Pieces::NONE)
 			{
+				//std::cout << "added pawn move\n";
 				moves[nnr * 8 + col] = true;
 			}
 		}

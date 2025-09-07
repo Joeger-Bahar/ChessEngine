@@ -1,5 +1,5 @@
 #include "core/engine.hpp"
-#include "graphics/graphicsEngine.hpp"
+#include "bot/bot.hpp"
 
 // TODO: Promotion GUI
 // TODO: Optimization with bitboards
@@ -8,6 +8,8 @@
 int main()
 {
 	Engine chessEngine;
+	Bot chessBot(&chessEngine, Color::BLACK);
+	chessEngine.SetBot(&chessBot);
 	while (1)
 	{
 		chessEngine.Update();

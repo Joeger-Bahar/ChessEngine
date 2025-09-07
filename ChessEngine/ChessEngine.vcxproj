@@ -136,6 +136,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\bot\bot.cpp" />
     <ClCompile Include="src\core\boardCalculator.cpp" />
     <ClCompile Include="src\core\engine.cpp" />
     <ClCompile Include="src\core\gameState.cpp" />
@@ -146,6 +147,7 @@
     <ClCompile Include="src\core\square.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\bot\bot.hpp" />
     <ClInclude Include="src\core\boardCalculator.hpp" />
     <ClInclude Include="src\core\engine.hpp" />
     <ClInclude Include="src\core\gameState.hpp" />
