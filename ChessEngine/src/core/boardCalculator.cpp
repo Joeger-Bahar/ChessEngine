@@ -251,7 +251,41 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 		}
 	}
 
-	return moves;
+	// Filter out moves that leave king in check
+	// This is not strictly necessary for pseudo-legal moves, but can be useful
+	// for certain engine algorithms that expect only legal moves.
+	std::vector<Move> legalMoves;
+	for (const Move& move : moves)
+	{
+		Square tempBoard[8][8];
+		memcpy(tempBoard, board, sizeof(Square) * 64);
+		// Apply the move
+		Piece movingPiece = tempBoard[move.startRow][move.startCol].GetPiece();
+		Piece capturedPiece = tempBoard[move.endRow][move.endCol].GetPiece();
+		tempBoard[move.endRow][move.endCol].SetPiece(movingPiece);
+		tempBoard[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		// Find king position
+		int kingRow = -1, kingCol = -1;
+		for (int r = 0; r < 8; r++)
+		{
+			for (int c = 0; c < 8; c++)
+			{
+				Piece p = tempBoard[r][c].GetPiece();
+				if (p.GetType() == Pieces::KING && p.GetColor() == color)
+				{
+					kingRow = r; kingCol = c;
+					break;
+				}
+			}
+			if (kingRow != -1) break;
+		}
+		Color enemy = (color == Color::WHITE) ? Color::BLACK : Color::WHITE;
+		if (!IsSquareAttacked(kingRow, kingCol, enemy, tempBoard))
+			legalMoves.push_back(move);
+		// No need to undo the move since we used a copy of the board
+	}
+
+	return legalMoves;
 }
 
 uint8_t BoardCalculator::FindPiece(Piece piece, const Square board[8][8])

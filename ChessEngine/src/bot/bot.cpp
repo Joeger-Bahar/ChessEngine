@@ -1,90 +1,84 @@
 #include "bot.hpp"
 
-#include <iostream>
-#include <random>
+#include "core/boardCalculator.hpp"
 
-std::mt19937 rng(std::random_device{}());
-std::uniform_int_distribution<int> dist(-100, 100);
+#include <limits>
+#include <iostream>
+#include <vector>
 
 Bot::Bot(Engine* engine, Color color)
 {
 	this->engine = engine;
 	this->botColor = color;
-	srand(time(0));
+}
+
+int Bot::Search(int depth, int alpha, int beta)
+{
+	if (depth == 0 || engine->IsOver())
+        return Eval();
+
+    int maxEval = std::numeric_limits<int>::min();
+    std::vector<Move> moves = BoardCalculator::GetAllMoves(GameState::currentPlayer, engine->GetBoard());
+
+    for (const Move move : moves) {
+        engine->MakeMove(move);
+        int score = -Search(depth - 1, -beta, -alpha);
+        engine->UndoMove();
+
+        if (score > maxEval) maxEval = score;
+        if (score > alpha) alpha = score;
+        if (alpha >= beta) break; // Prune
+    }
+
+    return maxEval;
 }
 
 Move Bot::GetMove()
 {
-	Move bestMove;
-	int bestEval = -100000;
+	int depth = 4; // Search depth
 
-	std::vector<Move> moves = BoardCalculator::GetAllMoves(engine->GetCurrentPlayer(), engine->GetBoard());
-	for (const Move& move : moves)
-	{
-		engine->MakeMove(move);
+    Move bestMove;
+    int bestScore = std::numeric_limits<int>::min();
 
-		engine->CheckKingInCheck();
-		if (engine->InCheck((engine->GetCurrentPlayer() == Color::WHITE) ? Color::BLACK : Color::WHITE))
-		{
-			engine->UndoMove();
-			continue; // Illegal move, try next
-		}
+    auto moves = BoardCalculator::GetAllMoves(GameState::currentPlayer, engine->GetBoard());
+    for (const auto& move : moves)
+    {
+        engine->MakeMove(move);
+        int score = -Search(depth - 1, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+        engine->UndoMove();
 
-		int eval = Search(3, false, -100000, 100000);
-		engine->UndoMove();
+        if (score > bestScore)
+        {
+            bestScore = score;
+            bestMove = move;
+        }
+    }
 
-		if (eval > bestEval)
-		{
-			bestEval = eval;
-			bestMove = move;
-		}
-	}
-
-	return bestMove;
-}
-
-int Bot::Search(int depth, bool maximizingPlayer, int alpha, int beta)
-{
-	if (depth == 0 || engine->IsOver())
-		return Eval();
-	
-
-	int bestEval = maximizingPlayer ? -100000 : 100000;
-
-	std::vector<Move> moves = BoardCalculator::GetAllMoves(engine->GetCurrentPlayer(), engine->GetBoard());
-	for (const Move& move : moves)
-	{
-		engine->MakeMove(move);
-
-		engine->CheckKingInCheck();
-		if (engine->InCheck((engine->GetCurrentPlayer() == Color::WHITE) ? Color::BLACK : Color::WHITE))
-		{
-			engine->UndoMove();
-			continue; // Illegal move, try next
-		}
-
-		int eval = Search(depth - 1, !maximizingPlayer, alpha, beta);
-		engine->UndoMove();
-
-		if (maximizingPlayer)
-		{
-			bestEval = std::max(bestEval, eval);
-			alpha = std::max(alpha, eval);
-		}
-		else
-		{
-			bestEval = std::min(bestEval, eval);
-			beta = std::min(beta, eval);
-		}
-		if (beta <= alpha)
-			break; // Alpha-beta pruning
-	}
-
-	return bestEval;
+    return bestMove;
 }
 
 int Bot::Eval()
 {
-	return dist(rng); // Placeholder random evaluation between -100 and 100
-}
+    int score = 0;
 
+    // Assign standard material values
+    const int pieceValues[] = { 100, 320, 330, 500, 900, 20000, 0 };
+
+    for (int r = 0; r < 8; ++r)
+    {
+        for (int c = 0; c < 8; ++c)
+        {
+            const Piece& p = engine->GetBoard()[r][c].GetPiece();
+            if (p.type == Pieces::NONE) continue;
+
+            int value = pieceValues[(int)p.type];
+
+            if (p.color == Color::WHITE) score += value;
+            else if (p.color == Color::BLACK) score -= value;
+        }
+    }
+
+    // Positive score = advantage for WHITE, negative = advantage for BLACK
+	if (botColor == Color::BLACK) score = -score; // Invert for BLACK bot
+    return score;
+}
