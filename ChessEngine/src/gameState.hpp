@@ -2,6 +2,8 @@
 
 #include "piece.hpp"
 
+#include <cstdint>
+
 namespace GameState
 {
 	inline Color currentPlayer = Color::WHITE;
@@ -16,6 +18,7 @@ namespace GameState
 
 struct BoardState
 {
+	BoardState();
 	uint8_t capturedPiece : 3; // 0-7 (PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NONE)
 	uint8_t movedPiece : 3;
 	uint8_t promotion : 3; // NONE if no promotion
@@ -27,16 +30,4 @@ struct BoardState
 	bool wasEnPassant : 1;
 	bool wasCastling  : 1;
 	bool playerToMove : 1; // true = white, false = black
-};
-
-struct s
-{
-	int a : 1;
-	int b : 1;
-	int c : 1;
-	int d : 1;
-	int e : 1;
-	int f : 1;
-	int g : 1;
-	int h : 1;
 };

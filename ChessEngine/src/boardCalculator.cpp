@@ -206,8 +206,7 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 								move.startCol = j;
 								move.endRow = endRow;
 								move.endCol = endCol;
-								move.capturedPiece = board[endRow][endCol].GetPiece();
-								move.promotion = Piece(promo, color);
+								move.promotion = static_cast<int>(promo);
 								moves.push_back(move);
 							}
 						}
@@ -244,7 +243,6 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 					move.startCol = j;
 					move.endRow = idx / 8;
 					move.endCol = idx % 8;
-					move.capturedPiece = board[move.endRow][move.endCol].GetPiece();
 					moves.push_back(move);
 				}
 			}

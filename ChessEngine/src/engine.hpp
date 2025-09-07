@@ -27,18 +27,17 @@ private:
 	void Render();
 	void ProcessWindowInput();
 	bool StoreMove(); // Returns if there was a second click to make a move
-	void ProcessMove(); // Validates move
-	void MakeMove();
+	void ProcessMove(Move& move); // Validates move
+	void MakeMove(const Move move);
 	bool HandleSpecialNotation(); // Returns if there was notation or not
-	bool ValidMove(const Piece piece); // Checks if the move is valid for the piece
+	bool ValidMove(const Piece piece, const Move move); // Checks if the move is valid for the piece
 	void UndoMove();
 
 	void CheckKingInCheck(); // Sets checkStatus
-	void UpdateCastlingRights(const Piece movingPiece, const Piece targetPiece);
-	void UpdateEnPassantSquare(const Piece movingPiece);
-	void AppendUndoList(const Piece movingPiece);
+	void UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece);
+	void UpdateEnPassantSquare(const Move move);
+	void AppendUndoList(BoardState state, const Move move);
 	void CheckCheckmate();
-
 
 	std::string GetFEN() const; // Get current position in FEN notation
 	void LoadPosition(std::string fen);
@@ -50,7 +49,6 @@ private:
 	Square board[8][8];
 	GraphicsEngine graphics;
 	std::string notationMove; // Clicks are converted to notation
-	Move move; // Current move being processed
 	std::pair<int, int> firstClick; // Not static variable for rendering purposes
 	std::pair<int, int> whiteKingPos = { -1, -1 };
 	std::pair<int, int> blackKingPos = { -1, -1 };

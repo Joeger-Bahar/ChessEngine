@@ -10,14 +10,14 @@ Engine::Engine()
 	: firstClick({ -1, -1 }), graphics()
 {
 	LoadPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-	AppendUndoList(Piece());
+	AppendUndoList(BoardState(), Move());
 }
 
 Engine::Engine(std::string fen)
 	: firstClick({ -1, -1 }), graphics()
 {
 	LoadPosition(fen);
-	AppendUndoList(Piece());
+	AppendUndoList(BoardState(), Move());
 }
 
 Engine::~Engine() {}
@@ -142,6 +142,7 @@ void Engine::ProcessWindowInput()
 
 void Engine::Update()
 {
+	Move move;
 	while (true) // Keep looping until we get a valid move
 	{
 		Render();
@@ -152,24 +153,26 @@ void Engine::Update()
 		if (!StoreMove())
 			continue; // No full move was entered, keep asking
 
-		ProcessMove();
+		ProcessMove(move);
 
 		if (invalidMove)
 		{
+			std::cout << "Invalid move\n";
 			invalidMove = false;
 			continue; // Move was structurally invalid
 		}
 
 		// Try to make the move
-		MakeMove();
+		MakeMove(move);
 
-		CheckKingInCheck();
-		if (InCheck((currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE))
-		{
-			// Illegal: move leaves player in check
-			UndoMove();
-			continue; // Ask for input again
-		}
+		// Not necessary but good for catching bugs, mostly in cached king pos
+		//CheckKingInCheck();
+		//if (InCheck((currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE))
+		//{
+		//	// Illegal: move leaves player in check
+		//	UndoMove();
+		//	continue; // Ask for input again
+		//}
 
 		break; // Move was valid, exit loop
 	}
@@ -261,7 +264,7 @@ bool Engine::StoreMove()
 	}
 }
 
-void Engine::ProcessMove()
+void Engine::ProcessMove(Move& move)
 {
 	// Castling
 	if (notationMove == "O-O-O" || notationMove == "O-O")
@@ -271,6 +274,8 @@ void Engine::ProcessMove()
 		move.startCol = 4;
 		move.endRow = move.startRow;
 		move.endCol = (notationMove == "O-O") ? 6 : 2;
+		move.wasCastle = true;
+		move.promotion = 6; // No promotion
 		return;
 	}
 
@@ -292,26 +297,37 @@ void Engine::ProcessMove()
 
 	// Check valid move conditions
 	// Don't need out of bounds because 'i'-'z' and '9' aren't valid
-	if (!ValidMove(movingPiece)) // Invalid move for the piece
+	if (!ValidMove(movingPiece, move)) // Invalid move for the piece
 	{
 		invalidMove = true;
 		return;
 	}
+
+	move.promotion = static_cast<int>((movingPiece.GetType() == Pieces::PAWN
+		&& (move.endRow == 0 || move.endRow == 7)) ?
+		Pieces::QUEEN : Pieces::NONE); // Auto promote to queen
+	move.wasCastle = false;
+	if (movingPiece.GetType() == Pieces::PAWN && move.endCol != move.startCol && // Moved diagonally
+		board[move.endRow][move.endCol].IsEmpty()) // Target square is empty
+		move.wasEnPassant = true;
 }
 
-void Engine::MakeMove()
+void Engine::MakeMove(const Move move)
 {
+	BoardState state;
+
 	const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
 	const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
 
 	// 1. Move piece
 	board[move.endRow][move.endCol].SetPiece(movingPiece);
 	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-	move.capturedPiece = targetPiece;
+	state.movedPiece = static_cast<uint8_t>(movingPiece.GetType());
+	state.capturedPiece = static_cast<uint8_t>(targetPiece.GetType());
 	// 2. Save state to undo list
 	// Here so when the move ^ is undone, it will be complimented with the current state
 	// The move above will be undone, but the game state will be applied
-	AppendUndoList(movingPiece);
+	AppendUndoList(state, move);
 
 	// Update king position if needed
 	if (movingPiece.GetType() == Pieces::KING)
@@ -323,9 +339,9 @@ void Engine::MakeMove()
 	}
 
 	// 3. Castling rights
-	UpdateCastlingRights(movingPiece, targetPiece);
+	UpdateCastlingRights(move, movingPiece, targetPiece);
 	// Handle castling
-	if (movingPiece.GetType() == Pieces::KING && abs(move.startCol - move.endCol) == 2)
+	if (move.wasCastle)
 	{
 		bool kingside = (move.endCol == 6);
 		int row = (currentPlayer == Color::WHITE) ? 7 : 0;
@@ -342,20 +358,18 @@ void Engine::MakeMove()
 	}
 
 	// 4. En passant sqaure/capture
-	UpdateEnPassantSquare(movingPiece);
+	UpdateEnPassantSquare(move);
 	// Check for capture
-	if (movingPiece.GetType() == Pieces::PAWN && targetPiece.GetType() == Pieces::NONE && move.startCol != move.endCol)
+	if (move.wasEnPassant)
 	{
 		int pawnRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
-		move.capturedPiece = board[pawnRow][move.endCol].GetPiece();
 		board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 	}
 
 	// 5. Pawn promotion
-	if (movingPiece.GetType() == Pieces::PAWN && (move.endRow == 0 || move.endRow == 7))
+	if (move.promotion != 6)
 	{
-		board[move.endRow][move.endCol].SetPiece(Piece(Pieces::QUEEN, currentPlayer)); // Auto promote to queen
-		move.promotion = Piece(Pieces::QUEEN, currentPlayer);
+		board[move.endRow][move.endCol].SetPiece(Piece((Pieces)move.promotion, currentPlayer));
 	}
 
 	// 6. Halfmove clock
@@ -414,7 +428,7 @@ bool Engine::HandleSpecialNotation()
 //	std::cout << "Time per call: " << (ns / iterations) << " ns\n";
 //}
 
-bool Engine::ValidMove(const Piece piece)
+bool Engine::ValidMove(const Piece piece, const Move move)
 {
 	// Check if the move is valid for the given piece type
 	std::vector<uint8_t> validMoves = BoardCalculator::GetValidMoves(move.startRow, move.startCol, board);
@@ -604,7 +618,7 @@ void Engine::CheckKingInCheck()
 		checkStatus = Color::NONE;
 }
 
-void Engine::UpdateCastlingRights(const Piece movingPiece, const Piece targetPiece)
+void Engine::UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece)
 {
 	// If neither side can castle, no need to check
 	if (!whiteCastlingRights[0] && !whiteCastlingRights[1] &&
@@ -663,8 +677,9 @@ void Engine::UpdateCastlingRights(const Piece movingPiece, const Piece targetPie
 	}
 }
 
-void Engine::UpdateEnPassantSquare(const Piece movingPiece)
+void Engine::UpdateEnPassantSquare(const Move move)
 {
+	const Piece movingPiece = board[move.endRow][move.endCol].GetPiece();
 	if (movingPiece.GetType() == Pieces::PAWN && abs(move.endRow - move.startRow) == 2) // If pawn moved 2
 	{
 		enPassantTarget[0] = (move.startRow + move.endRow) / 2;
@@ -677,21 +692,17 @@ void Engine::UpdateEnPassantSquare(const Piece movingPiece)
 	}
 }
 
-void Engine::AppendUndoList(const Piece movingPiece)
+void Engine::AppendUndoList(BoardState state, const Move move)
 {
-	BoardState state;
-	state.capturedPiece = static_cast<int>(move.capturedPiece.GetType());
-	state.movedPiece = static_cast<int>(movingPiece.GetType());
-	state.promotion = static_cast<int>(move.promotion.GetType());
+	state.promotion = move.promotion;
 	state.fromSquare = move.startRow * 8 + move.startCol;
 	state.toSquare = move.endRow * 8 + move.endCol;
 	state.enPassantTarget = (enPassantTarget[0] == -1) ? 64 : (enPassantTarget[0] * 8 + enPassantTarget[1]);
 	state.castlingRights = (whiteCastlingRights[0] << 3) | (whiteCastlingRights[1] << 2) |
 		(blackCastlingRights[0] << 1) | (blackCastlingRights[1]);
 	state.halfmoveClock = halfmoves;
-	state.wasEnPassant = (movingPiece.GetType() == Pieces::PAWN &&
-		move.capturedPiece.GetType() == Pieces::NONE && move.startCol != move.endCol);
-	state.wasCastling = (movingPiece.GetType() == Pieces::KING && abs(move.startCol - move.endCol) == 2);
+	state.wasEnPassant = move.wasEnPassant;
+	state.wasCastling = move.wasCastle;
 	state.playerToMove = (currentPlayer == Color::WHITE);
 	undoHistory.push_back(state);
 }

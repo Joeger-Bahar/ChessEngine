@@ -1,7 +1,6 @@
-//#include "move.hpp"
-//
-//struct Move
-//{
-//	uint8_t fromX, fromY;
-//	uint8_t toX, toY;
-//};
+#include "move.hpp"
+
+Move::Move()
+	: startCol(0), startRow(0), endCol(0), endRow(0), promotion(6), wasEnPassant(false), wasCastle(false)
+{
+}
