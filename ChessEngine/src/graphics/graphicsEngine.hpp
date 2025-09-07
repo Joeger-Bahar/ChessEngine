@@ -3,8 +3,8 @@
 #include <functional>
 #include <vector>
 
-#include "../square.hpp"
-#include "../piece.hpp"
+#include "core/square.hpp"
+#include "core/piece.hpp"
 
 #include <SDL/SDL.h>
 #undef main
