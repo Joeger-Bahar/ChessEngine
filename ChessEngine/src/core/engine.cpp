@@ -24,83 +24,45 @@ Engine::Engine(std::string fen)
 
 Engine::~Engine() {}
 
-void Engine::LoadPosition(std::string fen)
+void Engine::Update()
 {
-	// Load the board from a FEN string
-	// Loop through the FEN string and set up the board accordingly
-	// For simplicity, this implementation assumes a valid FEN string
-	int row = 0, col = 0;
-	int gameStateIndex = 0; // To track where the game state info starts
-	for (char c : fen)
+	Move move;
+	while (true) // Keep looping until we get a valid move
 	{
-		if (c == ' ') break;
-		gameStateIndex++;
-		if (c == '/') { row++; col = 0; continue; } // Next row
-		if (isdigit(c)) { col += c - '0'; continue; } // Empty squares
-		Color color = isupper(c) ? Color::WHITE : Color::BLACK;
-		Pieces pieceType;
-		switch (tolower(c))
+		Render();
+
+		if (IsOver())
+			return; // Game is finished
+
+		if (botPlaying && currentPlayer == bot->GetColor())
 		{
-		case 'p': pieceType = Pieces::PAWN; break;
-		case 'r': pieceType = Pieces::ROOK; break;
-		case 'n': pieceType = Pieces::KNIGHT; break;
-		case 'b': pieceType = Pieces::BISHOP; break;
-		case 'q': pieceType = Pieces::QUEEN; break;
-		case 'k': pieceType = Pieces::KING;
-			if (color == Color::WHITE)
-				whiteKingPos = { row, col };
-			else
-				blackKingPos = { row, col };
+			move = bot->GetMove();
 			break;
-		default: pieceType = Pieces::NONE; break;
 		}
-		board[row][col] = Square(color, Piece(pieceType, color));
-		col++;
+
+		if (!StoreMove())
+			continue; // No full move was entered, keep asking
+
+		ProcessMove(move);
+
+		if (invalidMove)
+		{
+			std::cout << "Invalid move\n";
+			invalidMove = false;
+			continue; // Move was structurally invalid
+		}
+
+		break; // Move was valid, exit loop
 	}
 
-	// Parse game state info
-	// After string sanitization, w KQkq - 0 1 turns into w-01
-	std::string fenGameState = fen.substr(gameStateIndex + 1);
-	if (fenGameState.length() < 4) return; // Invalid game state info
-	// Remove spaces
-	fenGameState.erase(remove(fenGameState.begin(), fenGameState.end(), ' '), fenGameState.end());
-	// Active color
-	currentPlayer = (fenGameState[0] == 'w') ? Color::WHITE : Color::BLACK;
-	// Castling rights
-	whiteCastlingRights[0] = (fenGameState.find('Q') != std::string::npos);
-	whiteCastlingRights[1] = (fenGameState.find('K') != std::string::npos);
-	blackCastlingRights[0] = (fenGameState.find('q') != std::string::npos);
-	blackCastlingRights[1] = (fenGameState.find('k') != std::string::npos);
-	// Remove all castling notation from string
-	fenGameState.erase(remove_if(fenGameState.begin(), fenGameState.end(),
-		[](char ch) { return ch == 'K' || ch == 'Q' || ch == 'k' || ch == 'q'; }), fenGameState.end());
-	
-	// En passant target, halfmoves and fullmoves
-	moveHistory.clear();
-	undoHistory.clear();
-	if (fenGameState[1] != '-') // If there is an en passant target
-	{
-		enPassantTarget[1] = fenGameState[1] - 'a'; // Column
-		enPassantTarget[0] = 8 - (fenGameState[2] - '0'); // Row
+	// Make the move
+	MakeMove(move);
 
-		halfmoves = std::stoi(fenGameState.substr(3, 1));
+	// Not necessary but good for catching bugs, mostly in cached king pos
+	CheckKingInCheck();
 
-		int fullmoves = std::stoi(fenGameState.substr(4));
-		//for (int i = 0; i < fullmoves * 2; i++)
-		//	moveHistory.push_back(Move());
-	}
-	else
-	{
-		enPassantTarget[0] = -1;
-		enPassantTarget[1] = -1;
-
-		halfmoves = std::stoi(fenGameState.substr(2, 1));
-
-		int fullmoves = std::stoi(fenGameState.substr(3));
-		
-		//for (int i = 0; i < fullmoves * 2; i++)
-		//	moveHistory.push_back(Move());
-	}
+	// Update game state after move
+	CheckCheckmate();
 }
 
 void Engine::Render()
@@ -120,74 +82,13 @@ void Engine::Render()
 		}
 	}
 	// Highlight king if in check
-	if (checkStatus != Color::NONE)
+	if (checkStatus)
 	{
-		std::pair<int, int> kingPos = (checkStatus == Color::WHITE) ? whiteKingPos : blackKingPos;
+		std::pair<int, int> kingPos = (checkStatus & 0b10) ? whiteKingPos : blackKingPos;
 		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(kingPos.first, kingPos.second, { 255, 0, 0, 100 }); }); // Red highlight
 	}
 
 	graphics.Render(board);
-}
-
-void Engine::ProcessWindowInput()
-{
-	std::pair<int, int> click = graphics.GetInputs(); // Returns the clicked row/col or a special code
-
-	if (click.first == -1 && click.second == -1)
-		return;
-
-	if (click.first == -2 && click.second == -2)
-	{
-		notationMove = "undo";
-	}
-}
-
-void Engine::Update()
-{
-	Move move;
-	while (true) // Keep looping until we get a valid move
-	{
-		Render();
-
-		if (IsOver())
-			return; // Game is finished
-
-		if (botPlaying && currentPlayer == bot->GetColor())
-		{
-			move = bot->GetMove();
-			MakeMove(move);
-			break;
-		}
-
-		if (!StoreMove())
-			continue; // No full move was entered, keep asking
-
-		ProcessMove(move);
-
-		if (invalidMove)
-		{
-			std::cout << "Invalid move\n";
-			invalidMove = false;
-			continue; // Move was structurally invalid
-		}
-
-		// Try to make the move
-		MakeMove(move);
-
-		// Not necessary but good for catching bugs, mostly in cached king pos
-		//CheckKingInCheck();
-		//if (InCheck((currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE))
-		//{
-		//	// Illegal: move leaves player in check
-		//	UndoMove();
-		//	continue; // Ask for input again
-		//}
-
-		break; // Move was valid, exit loop
-	}
-
-	// Update game state after move
-	CheckCheckmate();
 }
 
 bool Engine::StoreMove()
@@ -196,7 +97,7 @@ bool Engine::StoreMove()
 	// -2 -2 for undo
 	if (click.first == -2 && click.second == -2)
 	{
-		UndoMove();
+		UndoTurn();
 		return false;
 	}
 	// Check if -1, -1, and return
@@ -278,6 +179,11 @@ void Engine::ProcessMove(Move& move)
 	// Castling
 	if (notationMove == "O-O-O" || notationMove == "O-O")
 	{
+		if (InCheck(currentPlayer)) // Can't castle out of check
+		{
+			invalidMove = true;
+			return;
+		}
 		// Set start square to king and end square to 2 away
 		move.startRow = (currentPlayer == Color::WHITE) ? 7 : 0;
 		move.startCol = 4;
@@ -331,6 +237,7 @@ void Engine::MakeMove(const Move move)
 	// 1. Move piece
 	board[move.endRow][move.endCol].SetPiece(movingPiece);
 	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+
 	state.movedPiece = static_cast<uint8_t>(movingPiece.GetType());
 	state.capturedPiece = static_cast<uint8_t>(targetPiece.GetType());
 	// 2. Save state to undo list
@@ -405,13 +312,13 @@ bool Engine::HandleSpecialNotation()
 	if (notationMove == "resign")
 	{
 		checkmate = true;
-		checkStatus = (currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; // Opponent wins
+		checkStatus = (currentPlayer == Color::WHITE) ? 0b01 : 0b10; // Opponent
 		return true;
 	}
 	else if (notationMove == "draw")
 	{
 		checkmate = false;
-		checkStatus = Color::NONE; // Draw
+		checkStatus = 0; // Draw
 		return true;
 	}
 	else if (notationMove == "undo")
@@ -448,11 +355,6 @@ bool Engine::ValidMove(const Piece piece, const Move move)
 			return true;
 
 	return false;
-}
-
-bool Engine::IsOver()
-{
-	return checkmate || draw;
 }
 
 std::string Engine::GetFEN() const
@@ -526,6 +428,100 @@ std::string Engine::GetFEN() const
 	fen += std::to_string(moveHistory.size() / 2 + 1); // Fullmove number
 
 	return fen;
+}
+
+void Engine::LoadPosition(std::string fen)
+{
+	// Load the board from a FEN string
+	// Loop through the FEN string and set up the board accordingly
+	// For simplicity, this implementation assumes a valid FEN string
+	int row = 0, col = 0;
+	int gameStateIndex = 0; // To track where the game state info starts
+	for (char c : fen)
+	{
+		if (c == ' ') break;
+		gameStateIndex++;
+		if (c == '/') { row++; col = 0; continue; } // Next row
+		if (isdigit(c)) { col += c - '0'; continue; } // Empty squares
+		Color color = isupper(c) ? Color::WHITE : Color::BLACK;
+		Pieces pieceType;
+		switch (tolower(c))
+		{
+		case 'p': pieceType = Pieces::PAWN; break;
+		case 'r': pieceType = Pieces::ROOK; break;
+		case 'n': pieceType = Pieces::KNIGHT; break;
+		case 'b': pieceType = Pieces::BISHOP; break;
+		case 'q': pieceType = Pieces::QUEEN; break;
+		case 'k': pieceType = Pieces::KING;
+			if (color == Color::WHITE)
+				whiteKingPos = { row, col };
+			else
+				blackKingPos = { row, col };
+			break;
+		default: pieceType = Pieces::NONE; break;
+		}
+		board[row][col] = Square(color, Piece(pieceType, color));
+		col++;
+	}
+
+	// Parse game state info
+	// After string sanitization, w KQkq - 0 1 turns into w-01
+	std::string fenGameState = fen.substr(gameStateIndex + 1);
+	if (fenGameState.length() < 4) return; // Invalid game state info
+	// Remove spaces
+	fenGameState.erase(remove(fenGameState.begin(), fenGameState.end(), ' '), fenGameState.end());
+	// Active color
+	currentPlayer = (fenGameState[0] == 'w') ? Color::WHITE : Color::BLACK;
+	// Castling rights
+	whiteCastlingRights[0] = (fenGameState.find('Q') != std::string::npos);
+	whiteCastlingRights[1] = (fenGameState.find('K') != std::string::npos);
+	blackCastlingRights[0] = (fenGameState.find('q') != std::string::npos);
+	blackCastlingRights[1] = (fenGameState.find('k') != std::string::npos);
+	// Remove all castling notation from string
+	fenGameState.erase(remove_if(fenGameState.begin(), fenGameState.end(),
+		[](char ch) { return ch == 'K' || ch == 'Q' || ch == 'k' || ch == 'q'; }), fenGameState.end());
+
+	// En passant target, halfmoves and fullmoves
+	moveHistory.clear();
+	undoHistory.clear();
+	if (fenGameState[1] != '-') // If there is an en passant target
+	{
+		enPassantTarget[1] = fenGameState[1] - 'a'; // Column
+		enPassantTarget[0] = 8 - (fenGameState[2] - '0'); // Row
+
+		halfmoves = std::stoi(fenGameState.substr(3, 1));
+
+		int fullmoves = std::stoi(fenGameState.substr(4));
+		//for (int i = 0; i < fullmoves * 2; i++)
+		//	moveHistory.push_back(Move());
+	}
+	else
+	{
+		enPassantTarget[0] = -1;
+		enPassantTarget[1] = -1;
+
+		halfmoves = std::stoi(fenGameState.substr(2, 1));
+
+		int fullmoves = std::stoi(fenGameState.substr(3));
+
+		//for (int i = 0; i < fullmoves * 2; i++)
+		//	moveHistory.push_back(Move());
+	}
+}
+
+void Engine::AppendUndoList(BoardState state, const Move move)
+{
+	state.promotion = move.promotion;
+	state.fromSquare = move.startRow * 8 + move.startCol;
+	state.toSquare = move.endRow * 8 + move.endCol;
+	state.enPassantTarget = (enPassantTarget[0] == -1) ? 64 : (enPassantTarget[0] * 8 + enPassantTarget[1]);
+	state.castlingRights = (whiteCastlingRights[0] << 3) | (whiteCastlingRights[1] << 2) |
+		(blackCastlingRights[0] << 1) | (blackCastlingRights[1]);
+	state.halfmoveClock = halfmoves;
+	state.wasEnPassant = move.wasEnPassant;
+	state.wasCastling = move.wasCastle;
+	state.playerToMove = (currentPlayer == Color::WHITE);
+	undoHistory.push_back(state);
 }
 
 void Engine::UndoMove()
@@ -617,6 +613,12 @@ void Engine::UndoMove()
 	currentPlayer = player;
 }
 
+void Engine::UndoTurn()
+{
+	UndoMove();
+	UndoMove();
+}
+
 void Engine::SetBot(Bot* bot)
 {
 	this->bot = bot;
@@ -626,11 +628,13 @@ void Engine::SetBot(Bot* bot)
 void Engine::CheckKingInCheck()
 {
 	if (BoardCalculator::IsSquareAttacked(whiteKingPos.first, whiteKingPos.second, Color::BLACK, board))
-		checkStatus = Color::WHITE;
-	else if (BoardCalculator::IsSquareAttacked(blackKingPos.first, blackKingPos.second, Color::WHITE, board))
-		checkStatus = Color::BLACK;
+		checkStatus ^= (1 << 1);
 	else
-		checkStatus = Color::NONE;
+		checkStatus &= ~(1 << 1);
+	if (BoardCalculator::IsSquareAttacked(blackKingPos.first, blackKingPos.second, Color::WHITE, board))
+		checkStatus ^= (1 << 0);
+	else
+		checkStatus &= ~(1 << 0);
 }
 
 void Engine::UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece)
@@ -707,21 +711,6 @@ void Engine::UpdateEnPassantSquare(const Move move)
 	}
 }
 
-void Engine::AppendUndoList(BoardState state, const Move move)
-{
-	state.promotion = move.promotion;
-	state.fromSquare = move.startRow * 8 + move.startCol;
-	state.toSquare = move.endRow * 8 + move.endCol;
-	state.enPassantTarget = (enPassantTarget[0] == -1) ? 64 : (enPassantTarget[0] * 8 + enPassantTarget[1]);
-	state.castlingRights = (whiteCastlingRights[0] << 3) | (whiteCastlingRights[1] << 2) |
-		(blackCastlingRights[0] << 1) | (blackCastlingRights[1]);
-	state.halfmoveClock = halfmoves;
-	state.wasEnPassant = move.wasEnPassant;
-	state.wasCastling = move.wasCastle;
-	state.playerToMove = (currentPlayer == Color::WHITE);
-	undoHistory.push_back(state);
-}
-
 void Engine::CheckCheckmate()
 {
 	bool hasMoves = false;
@@ -746,7 +735,7 @@ void Engine::CheckCheckmate()
 	}
 	if (!hasMoves)
 	{
-		if (checkStatus == Color::NONE) // Stalemate
+		if (!(checkStatus & 0b11)) // Stalemate
 		{
 			draw = true;
 			std::cout << "Game is a draw by stalemate!\n";

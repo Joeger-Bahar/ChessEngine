@@ -1,7 +1,10 @@
 #include "bot.hpp"
 
-#include <ctime>
 #include <iostream>
+#include <random>
+
+std::mt19937 rng(std::random_device{}());
+std::uniform_int_distribution<int> dist(-100, 100);
 
 Bot::Bot(Engine* engine, Color color)
 {
@@ -12,33 +15,76 @@ Bot::Bot(Engine* engine, Color color)
 
 Move Bot::GetMove()
 {
-	std::vector<Move> moves = BoardCalculator::GetAllMoves(botColor, engine->GetBoard());
-	// Highlight every possible move in it's own color
-	//for (Move move : moves)
-	//{
-	//	unsigned char color = (move.startCol * 20) % 255;
-	//	engine->graphics.QueueRender([=]() { engine->graphics.DrawSquareHighlight(move.startRow, move.startCol, { 0, color, 0, 255 }); });
-	//	engine->graphics.QueueRender([=]() { engine->graphics.DrawSquareHighlight(move.endRow, move.endCol, { 0, color, 255, 255 }); });
-	//}
+	Move bestMove;
+	int bestEval = -100000;
 
-	while (moves.size() > 0)
+	std::vector<Move> moves = BoardCalculator::GetAllMoves(engine->GetCurrentPlayer(), engine->GetBoard());
+	for (const Move& move : moves)
 	{
-		int index = rand() % moves.size();
+		engine->MakeMove(move);
 
-		engine->MakeMove(moves[index]);
 		engine->CheckKingInCheck();
-		if (engine->InCheck(botColor))
+		if (engine->InCheck((engine->GetCurrentPlayer() == Color::WHITE) ? Color::BLACK : Color::WHITE))
 		{
 			engine->UndoMove();
-			// Remove move from list and try again
-			moves.erase(moves.begin() + index);
-			continue;
+			continue; // Illegal move, try next
 		}
+
+		int eval = Search(3, false, -100000, 100000);
 		engine->UndoMove();
 
-		return moves[index];
+		if (eval > bestEval)
+		{
+			bestEval = eval;
+			bestMove = move;
+		}
 	}
 
-	return Move();
+	return bestMove;
+}
+
+int Bot::Search(int depth, bool maximizingPlayer, int alpha, int beta)
+{
+	if (depth == 0 || engine->IsOver())
+		return Eval();
+	
+
+	int bestEval = maximizingPlayer ? -100000 : 100000;
+
+	std::vector<Move> moves = BoardCalculator::GetAllMoves(engine->GetCurrentPlayer(), engine->GetBoard());
+	for (const Move& move : moves)
+	{
+		engine->MakeMove(move);
+
+		engine->CheckKingInCheck();
+		if (engine->InCheck((engine->GetCurrentPlayer() == Color::WHITE) ? Color::BLACK : Color::WHITE))
+		{
+			engine->UndoMove();
+			continue; // Illegal move, try next
+		}
+
+		int eval = Search(depth - 1, !maximizingPlayer, alpha, beta);
+		engine->UndoMove();
+
+		if (maximizingPlayer)
+		{
+			bestEval = std::max(bestEval, eval);
+			alpha = std::max(alpha, eval);
+		}
+		else
+		{
+			bestEval = std::min(bestEval, eval);
+			beta = std::min(beta, eval);
+		}
+		if (beta <= alpha)
+			break; // Alpha-beta pruning
+	}
+
+	return bestEval;
+}
+
+int Bot::Eval()
+{
+	return dist(rng); // Placeholder random evaluation between -100 and 100
 }
 

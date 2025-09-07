@@ -13,6 +13,9 @@ public:
 	const Color GetColor() const { return botColor; }
 
 private:
+	int Search(int depth, bool maximizingPlayer, int alpha, int beta);
+	int Eval();
+
 	Engine* engine;
 	Color botColor;
 };

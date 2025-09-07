@@ -22,19 +22,19 @@ public:
 	~Engine();
 
 	void Update();
-	bool IsOver();
-	const Square(&GetBoard() const)[8][8]{ return board; }
+	void Render();
 	void MakeMove(const Move move);
 	void UndoMove();
+	void UndoTurn();
 	void SetBot(Bot* bot);
 	void CheckKingInCheck(); // Sets checkStatus
-	inline bool InCheck(Color color) { return GameState::checkStatus == color; }
+	const bool IsOver() const { return GameState::checkmate || GameState::draw; }
+	inline bool InCheck(Color color) { return (GameState::checkStatus & (color == Color::WHITE ? 0b10 : 0b01)) != 0; }
+	const Square(&GetBoard() const)[8][8]{ return board; }
+	const Color GetCurrentPlayer() const { return GameState::currentPlayer; }
 	//void Benchmark();
 
-	GraphicsEngine graphics;
 private:
-	void Render();
-	void ProcessWindowInput();
 	bool StoreMove(); // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move
 	bool HandleSpecialNotation(); // Returns if there was notation or not
@@ -50,6 +50,7 @@ private:
 	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
 
 	Square board[8][8];
+	GraphicsEngine graphics;
 	std::vector<Move> moveHistory;
 	std::vector<BoardState> undoHistory;
 	std::string notationMove; // Clicks are converted to notation
