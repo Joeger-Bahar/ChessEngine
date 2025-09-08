@@ -105,6 +105,10 @@ std::pair<int, int> GraphicsEngine::GetInputs()
 			{
 				return { -2, -2 }; // Special code for undo
 			}
+			if (event.key.keysym.sym == SDLK_RIGHT)
+			{
+				return { -3, -3 }; // Special code for undo
+			}
 		}
 	}
 

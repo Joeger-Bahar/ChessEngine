@@ -35,6 +35,7 @@ public:
 	const Square(&GetBoard() const)[8][8]{ return board; }
 	const Color GetCurrentPlayer() const { return GameState::currentPlayer; }
 	int Eval(); // Simple evaluation function for bot
+	std::string GetFEN() const; // Get current position in FEN notation
 	//void Benchmark();
 
 	GraphicsEngine graphics;
@@ -48,7 +49,6 @@ private:
 	void UpdateEnPassantSquare(const Move move);
 	void AppendUndoList(BoardState state, const Move move);
 
-	std::string GetFEN() const; // Get current position in FEN notation
 	void LoadPosition(std::string fen);
 	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
 

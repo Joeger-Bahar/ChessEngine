@@ -13,7 +13,9 @@ public:
 	const Color GetColor() const { return botColor; }
 
 private:
-	int Search(int depth, Color maximizingColor);// , int alpha, int beta);
+	int Search(int depth, Color maximizingColor, int alpha, int beta);
+	int ScoreMove(const Move move);
+	void OrderMoves(std::vector<Move>& moves);
 	//int Eval(Color sideToMove);
 
 	Engine* engine;

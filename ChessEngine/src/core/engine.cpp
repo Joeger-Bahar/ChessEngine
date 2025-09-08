@@ -57,9 +57,8 @@ void Engine::Update()
 
 	// Make the move
 	MakeMove(move);
-
-	// Print eval
-	std::cout << "Eval: " << Eval() << "\n";
+	//Render();
+	//Sleep(1000);
 
 	// Not necessary but good for catching bugs, mostly in cached king pos
 	CheckKingInCheck();
@@ -90,6 +89,13 @@ void Engine::Render()
 		std::pair<int, int> kingPos = (checkStatus & 0b10) ? whiteKingPos : blackKingPos;
 		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(kingPos.first, kingPos.second, { 255, 0, 0, 100 }); }); // Red highlight
 	}
+	if (moveHistory.size() >= 1)
+	{
+		Move lastMove = moveHistory.back();
+		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(lastMove.startRow, lastMove.startCol, { 180, 255, 0, 100 }); });
+		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(lastMove.endRow,   lastMove.endCol,   { 255, 180, 0, 100 }); });
+	}
+
 
 	graphics.Render(board);
 }
@@ -98,10 +104,13 @@ int Engine::Eval()
 {
 	int score = 0;
 	const int pieceValues[] = { 0, 100, 320, 330, 500, 900, 100000 };
-	for (int r = 0; r < 8; ++r) {
-		for (int c = 0; c < 8; ++c) {
+	for (int r = 0; r < 8; ++r)
+	{
+		for (int c = 0; c < 8; ++c)
+		{
 			Piece piece = board[r][c].GetPiece();
-			if (piece.GetType() != Pieces::NONE) {
+			if (piece.GetType() != Pieces::NONE)
+			{
 				int value = pieceValues[static_cast<int>(piece.GetType()) + 1];
 				score += (piece.GetColor() == Color::WHITE) ? value : -value;
 			}
@@ -114,6 +123,11 @@ bool Engine::StoreMove()
 {
 	std::pair<int, int> click = graphics.GetInputs();
 	// -2 -2 for undo
+	if (click.first == -3 && click.second == -3)
+	{
+		std::cout << GetFEN() << "\n";
+		return false;
+	}
 	if (click.first == -2 && click.second == -2)
 	{
 		UndoTurn();
@@ -442,7 +456,7 @@ std::string Engine::GetFEN() const
 	{
 		fen += " - ";
 	}
-	fen += halfmoves / 2; // Halfmove clock
+	fen += std::to_string(halfmoves); // Halfmove clock
 	fen += " ";
 	fen += std::to_string(moveHistory.size() / 2 + 1); // Fullmove number
 
@@ -620,6 +634,10 @@ void Engine::UndoMove()
 	// Restore halfmove clock
 	halfmoves = lastState.halfmoveClock;
 
+	// Couldn't be in check 2 moves in a row
+	// If in check after undo it gets set later
+	checkStatus = 0;
+
 	// Remove last move from history
 	if (!moveHistory.empty())
 		moveHistory.pop_back();
@@ -654,6 +672,15 @@ void Engine::CheckKingInCheck()
 		checkStatus ^= (1 << 0);
 	else
 		checkStatus &= ~(1 << 0);
+
+	//if (checkStatus & 0b10)
+	//{
+	//	graphics.QueueRender([=] {graphics.DrawSquareHighlight(whiteKingPos.first, whiteKingPos.second, { 255, 0, 0, 100 }); });
+	//}
+	//if (checkStatus & 0b01)
+	//{
+	//	graphics.QueueRender([=] {graphics.DrawSquareHighlight(blackKingPos.first, blackKingPos.second, { 255, 0, 0, 100 }); });
+	//}
 }
 
 void Engine::UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece)
