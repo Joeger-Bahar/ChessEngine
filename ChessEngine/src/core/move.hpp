@@ -12,4 +12,6 @@ struct Move
 	//Piece capturedPiece; // Piece that was captured, if any
 	uint8_t promotion;     // Promotion piece, if any
 	bool wasEnPassant, wasCastle;
+
+	const char* ToString() const;
 };

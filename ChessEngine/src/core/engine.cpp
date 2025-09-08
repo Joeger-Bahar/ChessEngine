@@ -58,6 +58,9 @@ void Engine::Update()
 	// Make the move
 	MakeMove(move);
 
+	// Print eval
+	std::cout << "Eval: " << Eval() << "\n";
+
 	// Not necessary but good for catching bugs, mostly in cached king pos
 	CheckKingInCheck();
 
@@ -89,6 +92,22 @@ void Engine::Render()
 	}
 
 	graphics.Render(board);
+}
+
+int Engine::Eval()
+{
+	int score = 0;
+	const int pieceValues[] = { 0, 100, 320, 330, 500, 900, 100000 };
+	for (int r = 0; r < 8; ++r) {
+		for (int c = 0; c < 8; ++c) {
+			Piece piece = board[r][c].GetPiece();
+			if (piece.GetType() != Pieces::NONE) {
+				int value = pieceValues[static_cast<int>(piece.GetType()) + 1];
+				score += (piece.GetColor() == Color::WHITE) ? value : -value;
+			}
+		}
+	}
+	return score;
 }
 
 bool Engine::StoreMove()
@@ -738,11 +757,11 @@ void Engine::CheckCheckmate()
 		if (!(checkStatus & 0b11)) // Stalemate
 		{
 			draw = true;
-			std::cout << "Game is a draw by stalemate!\n";
+			//std::cout << "Game is a draw by stalemate!\n";
 			return;
 		}
 		checkmate = true;
 		// Current player in checkmate
-		std::cout << ((currentPlayer == Color::WHITE) ? "Black" : "White") << " wins by checkmate!\n";
+		//std::cout << ((currentPlayer == Color::WHITE) ? "Black" : "White") << " wins by checkmate!\n";
 	}
 }

@@ -7,6 +7,8 @@
 #include "square.hpp"
 #include "move.hpp"
 
+#define Opponent(c) ((c) == Color::WHITE ? Color::BLACK : Color::WHITE)
+
 class BoardCalculator
 {
 public:

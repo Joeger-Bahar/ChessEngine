@@ -13,8 +13,8 @@ public:
 	const Color GetColor() const { return botColor; }
 
 private:
-	int Search(int depth, int alpha, int beta);
-	int Eval();
+	int Search(int depth, Color maximizingColor);// , int alpha, int beta);
+	//int Eval(Color sideToMove);
 
 	Engine* engine;
 	Color botColor;

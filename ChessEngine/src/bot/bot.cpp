@@ -5,6 +5,9 @@
 #include <limits>
 #include <iostream>
 #include <vector>
+#include <Windows.h>
+#undef min
+#undef max
 
 Bot::Bot(Engine* engine, Color color)
 {
@@ -12,73 +15,82 @@ Bot::Bot(Engine* engine, Color color)
 	this->botColor = color;
 }
 
-int Bot::Search(int depth, int alpha, int beta)
-{
-	if (depth == 0 || engine->IsOver())
-        return Eval();
-
-    int maxEval = std::numeric_limits<int>::min();
-    std::vector<Move> moves = BoardCalculator::GetAllMoves(GameState::currentPlayer, engine->GetBoard());
-
-    for (const Move move : moves) {
-        engine->MakeMove(move);
-        int score = -Search(depth - 1, -beta, -alpha);
-        engine->UndoMove();
-
-        if (score > maxEval) maxEval = score;
-        if (score > alpha) alpha = score;
-        if (alpha >= beta) break; // Prune
-    }
-
-    return maxEval;
-}
-
 Move Bot::GetMove()
 {
-	int depth = 4; // Search depth
+	int depth = 4;
 
-    Move bestMove;
-    int bestScore = std::numeric_limits<int>::min();
+	Move bestMove = Move();
+	if (botColor == Color::WHITE)
+	{
+		int bestScore = std::numeric_limits<int>::min();
+		std::vector<Move> moves = BoardCalculator::GetAllMoves(Color::WHITE, engine->GetBoard());
 
-    auto moves = BoardCalculator::GetAllMoves(GameState::currentPlayer, engine->GetBoard());
-    for (const auto& move : moves)
-    {
-        engine->MakeMove(move);
-        int score = -Search(depth - 1, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
-        engine->UndoMove();
+		for (Move move : moves)
+		{
+			engine->MakeMove(move);
+			int score = Search(depth - 1, Color::WHITE);
+			engine->UndoMove();
+			if (score > bestScore)
+			{
+				bestScore = score;
+				bestMove = move;
+			}
+		}
+	}
+	else
+	{
+		int bestScore = std::numeric_limits<int>::max();
+		std::vector<Move> moves = BoardCalculator::GetAllMoves(Color::BLACK, engine->GetBoard());
 
-        if (score > bestScore)
-        {
-            bestScore = score;
-            bestMove = move;
-        }
-    }
+		for (Move move : moves)
+		{
+			engine->MakeMove(move);
+			int score = Search(depth - 1, Color::WHITE);
+			engine->UndoMove();
+			if (score < bestScore)
+			{
+				bestScore = score;
+				bestMove = move;
+			}
+		}
+	}
 
-    return bestMove;
+	return bestMove;
 }
 
-int Bot::Eval()
+int Bot::Search(int depth, Color maximizingColor)
 {
-    int score = 0;
+	if (depth == 0 || engine->IsOver())
+		return engine->Eval();
 
-    // Assign standard material values
-    const int pieceValues[] = { 100, 320, 330, 500, 900, 20000, 0 };
+	Color currentColor = GameState::currentPlayer;
 
-    for (int r = 0; r < 8; ++r)
-    {
-        for (int c = 0; c < 8; ++c)
-        {
-            const Piece& p = engine->GetBoard()[r][c].GetPiece();
-            if (p.type == Pieces::NONE) continue;
+	if (currentColor == maximizingColor)
+	{
+		int maxEval = std::numeric_limits<int>::min();
+		std::vector<Move> moves = BoardCalculator::GetAllMoves(currentColor, engine->GetBoard());
 
-            int value = pieceValues[(int)p.type];
+		for (Move move : moves)
+		{
+			engine->MakeMove(move);
+			int eval = Search(depth - 1, maximizingColor);
+			engine->UndoMove();
+			maxEval = std::max(maxEval, eval);
+		}
+		return maxEval;
+	}
+	else
+	{
+		int minEval = std::numeric_limits<int>::max();
+		std::vector<Move> moves = BoardCalculator::GetAllMoves(currentColor, engine->GetBoard());
 
-            if (p.color == Color::WHITE) score += value;
-            else if (p.color == Color::BLACK) score -= value;
-        }
-    }
-
-    // Positive score = advantage for WHITE, negative = advantage for BLACK
-	if (botColor == Color::BLACK) score = -score; // Invert for BLACK bot
-    return score;
+		for (Move move : moves)
+		{
+			engine->MakeMove(move);
+			int eval = Search(depth - 1, maximizingColor);
+			engine->UndoMove();
+			minEval = std::min(minEval, eval);
+		}
+		return minEval;
+	}
 }
