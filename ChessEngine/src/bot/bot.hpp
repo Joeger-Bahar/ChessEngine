@@ -4,6 +4,7 @@
 #include "core/boardCalculator.hpp"
 #include "core/engine.hpp"
 #include "graphics/graphicsEngine.hpp"
+#include "core/tt.hpp"
 
 class Bot
 {
@@ -18,7 +19,8 @@ private:
 	void OrderMoves(std::vector<Move>& moves);
 	//int Eval(Color sideToMove);
 
+	TranspositionTable tt;
 	Engine* engine;
 	Color botColor;
-	int nodesSearched = 0;
+	int nodesSearched;
 };

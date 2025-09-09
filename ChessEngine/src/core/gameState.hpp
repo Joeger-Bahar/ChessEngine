@@ -19,6 +19,7 @@ namespace GameState
 struct BoardState
 {
 	BoardState();
+	uint64_t zobristKey;
 	uint8_t capturedPiece : 3; // 0-7 (PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NONE)
 	uint8_t movedPiece : 3;
 	uint8_t promotion : 3; // NONE if no promotion

@@ -37,6 +37,7 @@ void Engine::Update()
 		if (botPlaying && currentPlayer == bot->GetColor())
 		{
 			move = bot->GetMove();
+			std::cout << move.ToString() << "\n";
 			break;
 		}
 
@@ -116,6 +117,51 @@ int Engine::Eval()
 		}
 	}
 	return score;
+}
+
+int Engine::PieceToIndex(const Piece& p) const
+{
+	switch (p.GetType())
+	{
+	case Pieces::PAWN:   return (p.GetColor() == Color::WHITE) ? 0 : 6;
+	case Pieces::KNIGHT: return (p.GetColor() == Color::WHITE) ? 1 : 7;
+	case Pieces::BISHOP: return (p.GetColor() == Color::WHITE) ? 2 : 8;
+	case Pieces::ROOK:   return (p.GetColor() == Color::WHITE) ? 3 : 9;
+	case Pieces::QUEEN:  return (p.GetColor() == Color::WHITE) ? 4 : 10;
+	case Pieces::KING:   return (p.GetColor() == Color::WHITE) ? 5 : 11;
+	default: return -1;
+	}
+}
+
+uint64_t Engine::ComputeFullHash() const
+{
+	uint64_t h = 0;
+	for (int r = 0; r < 8; ++r) {
+		for (int c = 0; c < 8; ++c) {
+			Piece piece = board[r][c].GetPiece();
+			if (piece.GetType() != Pieces::NONE) {
+				int pieceIndex = PieceToIndex(piece);
+				int sq = r * 8 + c;
+				h ^= zobrist.piece[pieceIndex][sq];
+			}
+		}
+	}
+	if (currentPlayer == Color::BLACK) h ^= zobrist.sideToMove;
+
+	// castling rights
+	if (whiteCastlingRights[1]) h ^= zobrist.castling[0]; // WK
+	if (whiteCastlingRights[0]) h ^= zobrist.castling[1]; // WQ
+	if (blackCastlingRights[1]) h ^= zobrist.castling[2]; // BK
+	if (blackCastlingRights[0]) h ^= zobrist.castling[3]; // BQ
+
+	// en passant
+	if (enPassantTarget[0] != -1 && enPassantTarget[1] != -1)
+	{
+		int file = enPassantTarget[1];
+		h ^= zobrist.enPassantFile[file];
+	}
+
+	return h;
 }
 
 bool Engine::StoreMove()
@@ -259,84 +305,300 @@ void Engine::ProcessMove(Move& move)
 		move.wasEnPassant = true;
 }
 
+//void Engine::MakeMove(const Move move)
+//{
+//	BoardState state;
+//
+//	const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
+//	const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
+//
+//	// 1. Move piece
+//	board[move.endRow][move.endCol].SetPiece(movingPiece);
+//	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+//
+//	state.movedPiece = static_cast<uint8_t>(movingPiece.GetType());
+//	state.capturedPiece = static_cast<uint8_t>(targetPiece.GetType());
+//	// 2. Save state to undo list
+//	// Here so when the move ^ is undone, it will be complimented with the current state
+//	// The move above will be undone, but the game state will be applied
+//	AppendUndoList(state, move);
+//
+//	// Update king position if needed
+//	if (movingPiece.GetType() == Pieces::KING)
+//	{
+//		if (currentPlayer == Color::WHITE)
+//			whiteKingPos = { move.endRow, move.endCol };
+//		else
+//			blackKingPos = { move.endRow, move.endCol };
+//	}
+//
+//	// 3. Castling rights
+//	UpdateCastlingRights(move, movingPiece, targetPiece);
+//	// Handle castling
+//	if (move.wasCastle)
+//	{
+//		bool kingside = (move.endCol == 6);
+//		int row = (currentPlayer == Color::WHITE) ? 7 : 0;
+//		int rookStartCol = kingside ? 7 : 0;
+//		int rookEndCol = kingside ? 5 : 3;
+//		// Move rook
+//		board[row][rookEndCol].SetPiece(board[row][rookStartCol].GetPiece());
+//		board[row][rookStartCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+//		// Update king position
+//		if (currentPlayer == Color::WHITE)
+//			whiteKingPos = { row, move.endCol };
+//		else
+//			blackKingPos = { row, move.endCol };
+//	}
+//
+//	// 4. En passant sqaure/capture
+//	UpdateEnPassantSquare(move);
+//	// Check for capture
+//	if (move.wasEnPassant)
+//	{
+//		int pawnRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
+//		board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+//	}
+//
+//	// 5. Pawn promotion
+//	if (move.promotion != 6)
+//	{
+//		board[move.endRow][move.endCol].SetPiece(Piece((Pieces)move.promotion, currentPlayer));
+//	}
+//
+//	// 6. Halfmove clock
+//	if (movingPiece.GetType() == Pieces::PAWN || targetPiece.GetType() != Pieces::NONE)
+//		halfmoves = 0;
+//	else if (currentPlayer == Color::BLACK)
+//		halfmoves++;
+//	if (halfmoves >= 50) // 50-move rule
+//	{
+//		draw = true;
+//		std::cout << "Game is a draw by the 50-move rule!\n";
+//		return;
+//	}
+//
+//	// 7. Save move
+//	moveHistory.push_back(move);
+//
+//	// remove old en-passant
+//	if (enPassantTarget[0] != -1)
+//		zobristKey ^= zobrist.enPassantFile[enPassantTarget[1]];
+//
+//	// remove old castling rights
+//	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
+//	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
+//	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
+//	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
+//
+//	// remove piece from start square
+//	int fromSq = move.startRow * 8 + move.startCol;
+//	zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][fromSq];
+//
+//	// if capture
+//	if (targetPiece.GetType() != Pieces::NONE)
+//		zobristKey ^= zobrist.piece[PieceToIndex(targetPiece)][move.endRow * 8 + move.endCol];
+//
+//	// if en passant capture
+//	if (move.wasEnPassant) {
+//		int capRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
+//		Piece capPawn(Pieces::PAWN, (currentPlayer == Color::WHITE ? Color::BLACK : Color::WHITE));
+//		zobristKey ^= zobrist.piece[PieceToIndex(capPawn)][capRow * 8 + move.endCol];
+//	}
+//
+//	// add moved piece to end square (promotion handled separately)
+//	if (move.promotion != static_cast<int>(Pieces::NONE)) {
+//		Piece promo((Pieces)move.promotion, currentPlayer);
+//		zobristKey ^= zobrist.piece[PieceToIndex(promo)][move.endRow * 8 + move.endCol];
+//	}
+//	else {
+//		zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][move.endRow * 8 + move.endCol];
+//	}
+//
+//	// update castling rights
+//	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
+//	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
+//	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
+//	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
+//
+//	// update en-passant (if new pawn double-move)
+//	if (movingPiece.GetType() == Pieces::PAWN && abs(move.startRow - move.endRow) == 2) {
+//		zobristKey ^= zobrist.enPassantFile[move.startCol];
+//	}
+//
+//	// side to move
+//	zobristKey ^= zobrist.sideToMove;
+//
+//	//std::cout << zobristKey << "\n";
+//	if (zobristKey != ComputeFullHash())
+//	{
+//		std::cout << "Doesn't match\n";
+//		std::cout << "Move key " << zobristKey << " vs full hash " << ComputeFullHash() << "\n";
+//	}
+//
+//	// 8. Change side to move
+//	ChangePlayers();
+//}
 void Engine::MakeMove(const Move move)
 {
-	BoardState state;
+	// --- snapshot old state (before any modification) ---
+	int oldEP_row = enPassantTarget[0];
+	int oldEP_col = enPassantTarget[1];
+	bool oldWhiteCastle0 = whiteCastlingRights[0];
+	bool oldWhiteCastle1 = whiteCastlingRights[1];
+	bool oldBlackCastle0 = blackCastlingRights[0];
+	bool oldBlackCastle1 = blackCastlingRights[1];
+	Color oldPlayer = currentPlayer;
 
 	const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
 	const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
+	int fromSq = move.startRow * 8 + move.startCol;
+	int toSq = move.endRow * 8 + move.endCol;
 
-	// 1. Move piece
+	// Save state for undo (snapshot zobrist key too)
+	BoardState state;
+	state.movedPiece = static_cast<uint8_t>(movingPiece.GetType());
+	state.capturedPiece = static_cast<uint8_t>(targetPiece.GetType());
+	AppendUndoList(state, move); // make sure AppendUndoList stores zobristKey in the state
+
+	// --- XOR OUT old ephemeral things (use the snapshots) ---
+	if (oldEP_row != -1) {
+		int oldEP_file = oldEP_col;
+		zobristKey ^= zobrist.enPassantFile[oldEP_file];
+	}
+
+	if (oldWhiteCastle1) zobristKey ^= zobrist.castling[0];
+	if (oldWhiteCastle0) zobristKey ^= zobrist.castling[1];
+	if (oldBlackCastle1) zobristKey ^= zobrist.castling[2];
+	if (oldBlackCastle0) zobristKey ^= zobrist.castling[3];
+
+	// XOR out moving piece from its FROM square (old board)
+	zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][fromSq];
+
+	// If a normal capture (not en-passant), XOR out captured piece at destination (old board)
+	if (targetPiece.GetType() != Pieces::NONE) {
+		zobristKey ^= zobrist.piece[PieceToIndex(targetPiece)][toSq];
+	}
+	// If en-passant *capture*, the captured pawn is not on the 'to' square; it's behind it.
+	if (move.wasEnPassant) {
+		int capRow = (oldPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
+		int capSq = capRow * 8 + move.endCol;
+		Piece capturedPawn(Pieces::PAWN, (oldPlayer == Color::WHITE ? Color::BLACK : Color::WHITE));
+		zobristKey ^= zobrist.piece[PieceToIndex(capturedPawn)][capSq];
+	}
+
+	// --- Now apply the physical move to board & state (exactly like your existing code) ---
+	// 1. Move piece on board
 	board[move.endRow][move.endCol].SetPiece(movingPiece);
 	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 
-	state.movedPiece = static_cast<uint8_t>(movingPiece.GetType());
-	state.capturedPiece = static_cast<uint8_t>(targetPiece.GetType());
-	// 2. Save state to undo list
-	// Here so when the move ^ is undone, it will be complimented with the current state
-	// The move above will be undone, but the game state will be applied
-	AppendUndoList(state, move);
-
-	// Update king position if needed
-	if (movingPiece.GetType() == Pieces::KING)
-	{
-		if (currentPlayer == Color::WHITE)
-			whiteKingPos = { move.endRow, move.endCol };
-		else
-			blackKingPos = { move.endRow, move.endCol };
+	// update king pos if needed (you already have this)
+	if (movingPiece.GetType() == Pieces::KING) {
+		if (oldPlayer == Color::WHITE) whiteKingPos = { move.endRow, move.endCol };
+		else blackKingPos = { move.endRow, move.endCol };
 	}
 
-	// 3. Castling rights
+	// 2. Update castling rights (this modifies whiteCastlingRights / blackCastlingRights)
 	UpdateCastlingRights(move, movingPiece, targetPiece);
-	// Handle castling
-	if (move.wasCastle)
-	{
+
+	// 3. Handle castling rook movement (if move.wasCastle)
+	if (move.wasCastle) {
 		bool kingside = (move.endCol == 6);
-		int row = (currentPlayer == Color::WHITE) ? 7 : 0;
+		int row = (oldPlayer == Color::WHITE) ? 7 : 0;
 		int rookStartCol = kingside ? 7 : 0;
 		int rookEndCol = kingside ? 5 : 3;
-		// Move rook
+		int rookFromSq = row * 8 + rookStartCol;
+		int rookToSq = row * 8 + rookEndCol;
+
+		Piece rook(Pieces::ROOK, oldPlayer);
+
+		// --- update zobrist for rook ---
+		zobristKey ^= zobrist.piece[PieceToIndex(rook)][rookFromSq]; // remove rook from start square
+		zobristKey ^= zobrist.piece[PieceToIndex(rook)][rookToSq];   // add rook to end square
+
 		board[row][rookEndCol].SetPiece(board[row][rookStartCol].GetPiece());
 		board[row][rookStartCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-		// Update king position
-		if (currentPlayer == Color::WHITE)
-			whiteKingPos = { row, move.endCol };
-		else
-			blackKingPos = { row, move.endCol };
+
+		if (oldPlayer == Color::WHITE) whiteKingPos = { row, move.endCol };
+		else blackKingPos = { row, move.endCol };
+
+		//bool kingside = (move.endCol == 6);
+		//int row = (oldPlayer == Color::WHITE) ? 7 : 0;
+		//int rookStartCol = kingside ? 7 : 0;
+		//int rookEndCol = kingside ? 5 : 3;
+		//int rookFromSq = row * 8 + rookStartCol;
+		//int rookToSq = row * 8 + rookEndCol;
+		//Piece rook(Pieces::ROOK, oldPlayer);
+
+		//// --- update zobrist for rook ---
+		//zobristKey ^= zobrist.piece[PieceToIndex(rook)][rookFromSq]; // remove rook from start square
+		//zobristKey ^= zobrist.piece[PieceToIndex(rook)][rookToSq];   // add rook to end square
+
+		//// already have the board updates below
+		//board[row][rookEndCol].SetPiece(board[row][rookStartCol].GetPiece());
+		//board[row][rookStartCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+
+		//if (oldPlayer == Color::WHITE) whiteKingPos = { row, move.endCol };
+		//else blackKingPos = { row, move.endCol };
 	}
 
-	// 4. En passant sqaure/capture
+	// 4. Update en-passant target (this will change enPassantTarget)
 	UpdateEnPassantSquare(move);
-	// Check for capture
-	if (move.wasEnPassant)
-	{
-		int pawnRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
+
+	// 5. Handle en-passant capture on board
+	if (move.wasEnPassant) {
+		int pawnRow = (oldPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
 		board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 	}
 
-	// 5. Pawn promotion
-	if (move.promotion != 6)
-	{
-		board[move.endRow][move.endCol].SetPiece(Piece((Pieces)move.promotion, currentPlayer));
+	// 6. Handle promotion on board
+	if (move.promotion != 6) {
+		board[move.endRow][move.endCol].SetPiece(Piece((Pieces)move.promotion, oldPlayer));
 	}
 
-	// 6. Halfmove clock
+	// 7. Update halfmove clock etc. (your existing logic)
 	if (movingPiece.GetType() == Pieces::PAWN || targetPiece.GetType() != Pieces::NONE)
 		halfmoves = 0;
-	else if (currentPlayer == Color::BLACK)
+	else if (oldPlayer == Color::BLACK)
 		halfmoves++;
-	if (halfmoves >= 50) // 50-move rule
-	{
-		draw = true;
-		std::cout << "Game is a draw by the 50-move rule!\n";
-		return;
-	}
+	if (halfmoves >= 50) { draw = true; /*...*/ }
 
-	// 7. Save move
+	// 8. Save moveHistory (you already do)
 	moveHistory.push_back(move);
 
-	// 8. Change side to move
-	ChangePlayers();
+	// --- XOR IN new things (after board has new pos & flags) ---
+	// add piece at destination (promotion handled)
+	if (move.promotion != static_cast<int>(Pieces::NONE)) {
+		Piece promo((Pieces)move.promotion, oldPlayer);
+		zobristKey ^= zobrist.piece[PieceToIndex(promo)][toSq];
+	}
+	else {
+		zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][toSq];
+	}
+
+	// XOR in new castling rights (use the current whiteCastlingRights/blackCastlingRights)
+	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
+	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
+	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
+	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
+
+	// XOR in new en-passant if present (enPassantTarget updated earlier)
+	if (enPassantTarget[0] != -1) {
+		zobristKey ^= zobrist.enPassantFile[enPassantTarget[1]];
+	}
+
+	// --- Finally, flip side-to-move in engine state and in the hash consistently ---
+	ChangePlayers(); // flips currentPlayer
+	zobristKey ^= zobrist.sideToMove;
+
+	// --- Optional check: recompute and compare ---
+	//uint64_t recomputed = ComputeFullHash();
+	//if (zobristKey != recomputed) {
+	//	std::cout << "Hash mismatch\n";
+	//	std::cout << "inc:  " << std::hex << zobristKey << "\n";
+	//	std::cout << "full: " << std::hex << recomputed << "\n";
+	//	std::cout << GetFEN() << "\n";
+	//}
 }
 
 bool Engine::HandleSpecialNotation()
@@ -539,10 +801,12 @@ void Engine::LoadPosition(std::string fen)
 		//for (int i = 0; i < fullmoves * 2; i++)
 		//	moveHistory.push_back(Move());
 	}
+	zobristKey = ComputeFullHash();
 }
 
 void Engine::AppendUndoList(BoardState state, const Move move)
 {
+	state.zobristKey = zobristKey;
 	state.promotion = move.promotion;
 	state.fromSquare = move.startRow * 8 + move.startCol;
 	state.toSquare = move.endRow * 8 + move.endCol;
@@ -576,6 +840,8 @@ void Engine::UndoMove()
 	int fromCol = lastState.fromSquare % 8;
 	int toRow = lastState.toSquare / 8;
 	int toCol = lastState.toSquare % 8;
+
+	zobristKey = lastState.zobristKey;
 
 	// Can't restore to previous move because
 					// Variable is managed in a way that converts from 0-6 to Piece

@@ -9,6 +9,7 @@
 #include "move.hpp"
 #include "boardCalculator.hpp"
 #include "gameState.hpp"
+#include "zobrist.hpp"
 
 #include "graphics/graphicsEngine.hpp"
 
@@ -34,12 +35,15 @@ public:
 	inline bool IsCheckmate(Color color) { return GameState::checkmate && InCheck(color); }
 	const Square(&GetBoard() const)[8][8]{ return board; }
 	const Color GetCurrentPlayer() const { return GameState::currentPlayer; }
+	const uint64_t GetZobristKey() { return zobristKey; }
 	int Eval(); // Simple evaluation function for bot
 	std::string GetFEN() const; // Get current position in FEN notation
 	//void Benchmark();
 
 	GraphicsEngine graphics;
 private:
+	int PieceToIndex(const Piece& p) const;
+	uint64_t ComputeFullHash() const;
 	bool StoreMove(); // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move
 	bool HandleSpecialNotation(); // Returns if there was notation or not
@@ -52,6 +56,8 @@ private:
 	void LoadPosition(std::string fen);
 	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
 
+	Zobrist zobrist;
+	uint64_t zobristKey = 0;
 	Square board[8][8];
 	std::vector<Move> moveHistory;
 	std::vector<BoardState> undoHistory;
