@@ -59,8 +59,9 @@ Move Bot::GetMove()
 	Move bestMove = Move();
 	int alpha = std::numeric_limits<int>::min();
 	int beta = std::numeric_limits<int>::max();
+	bool foundLegal = false;
 
-	std::vector<Move> moves = BoardCalculator::GetAllMoves(botColor, engine->GetBoard());
+	std::vector<Move> moves = BoardCalculator::GetAllLegalMoves(botColor, engine->GetBoard());
 	OrderMoves(moves);
 
 	if (botColor == Color::WHITE)
@@ -79,6 +80,8 @@ Move Bot::GetMove()
 				engine->UndoMove();
 				continue; // skip illegal move
 			}
+
+			foundLegal = true;
 
 			int score = Search(depth - 1, Color::WHITE, alpha, beta);
 			engine->UndoMove();
@@ -109,6 +112,8 @@ Move Bot::GetMove()
 				continue; // skip illegal move
 			}
 
+			foundLegal = true;
+
 			int score = Search(depth - 1, Color::WHITE, alpha, beta);
 			engine->UndoMove();
 
@@ -122,31 +127,22 @@ Move Bot::GetMove()
 		}
 	}
 
-	engine->MakeMove(bestMove);
 
-	engine->CheckKingInCheck();
-	bool illegal = (GameState::checkStatus & ((botColor == Color::WHITE) ? 0b10 : 0b01));
-
-	if (illegal)
-	{
-		std::cout << engine->GetFEN() << "\n";
-		engine->UndoMove();
-		std::cout << "In check\n";
-		return bestMove;
-	}
-	engine->UndoMove();
-
+	//std::cout << "Searched " << nodesSearched << " nodes\n";
 	return bestMove;
 }
 
 int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 {
+	++nodesSearched;
 	if (depth == 0 || engine->IsOver())
 		return engine->Eval();
 
 	Color currentColor = GameState::currentPlayer;
+	bool foundLegal = false;
 
 	std::vector<Move> moves = BoardCalculator::GetAllMoves(currentColor, engine->GetBoard());
+
 	OrderMoves(moves);
 
 	if (currentColor == maximizingColor)
@@ -163,8 +159,10 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 			if (illegal)
 			{
 				engine->UndoMove();
-				continue; // skip illegal move
+				continue; // Skip illegal move
 			}
+
+			foundLegal = true;
 
 			int eval = Search(depth - 1, maximizingColor, alpha, beta);
 			engine->UndoMove();
@@ -175,6 +173,16 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 			if (beta <= alpha)
 				break; // Prune
 		}
+		if (!foundLegal)
+		{
+			engine->CheckKingInCheck();
+			if (GameState::checkStatus)
+			{
+				return std::numeric_limits<int>::min() + depth; // Checkmate
+			}
+			else return 0; // Stalemate
+		}
+
 		return maxEval;
 	}
 	else
@@ -191,8 +199,10 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 			if (illegal)
 			{
 				engine->UndoMove();
-				continue; // skip illegal move
+				continue; // Skip illegal move
 			}
+
+			foundLegal = true;
 
 			int eval = Search(depth - 1, maximizingColor, alpha, beta);
 			engine->UndoMove();
@@ -203,6 +213,16 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 			if (beta <= alpha)
 				break; // Prune
 		}
+		if (!foundLegal)
+		{
+			engine->CheckKingInCheck();
+			if (GameState::checkStatus)
+			{
+				return std::numeric_limits<int>::max() - depth; // Checkmate
+			}
+			return 0; // Stalemate
+		}
+
 		return minEval;
 	}
 }

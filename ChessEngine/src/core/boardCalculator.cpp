@@ -166,7 +166,7 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 	return validMoves;
 }
 
-std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8])
+std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square board[8][8])
 {
 	std::vector<Move> moves;
 	for (int i = 0; i < 8; ++i)
@@ -246,44 +246,128 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 					moves.push_back(move);
 				}
 			}
-
-			//std::cout << "Found " << moves.size() << " moves for piece at " << i << "," << j << "\n";
 		}
 	}
 
 	// Filter out moves that leave king in check
 	// This is not strictly necessary for pseudo-legal moves, but can be useful
 	// for certain engine algorithms that expect only legal moves.
-	//std::vector<Move> legalMoves;
-	//for (const Move& move : moves)
-	//{
-	//	Square tempBoard[8][8];
-	//	memcpy(tempBoard, board, sizeof(Square) * 64);
-	//	// Apply the move
-	//	Piece movingPiece = tempBoard[move.startRow][move.startCol].GetPiece();
-	//	Piece capturedPiece = tempBoard[move.endRow][move.endCol].GetPiece();
-	//	tempBoard[move.endRow][move.endCol].SetPiece(movingPiece);
-	//	tempBoard[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-	//	// Find king position
-	//	int kingRow = -1, kingCol = -1;
-	//	for (int r = 0; r < 8; r++)
-	//	{
-	//		for (int c = 0; c < 8; c++)
-	//		{
-	//			Piece p = tempBoard[r][c].GetPiece();
-	//			if (p.GetType() == Pieces::KING && p.GetColor() == color)
-	//			{
-	//				kingRow = r; kingCol = c;
-	//				break;
-	//			}
-	//		}
-	//		if (kingRow != -1) break;
-	//	}
-	//	Color enemy = (color == Color::WHITE) ? Color::BLACK : Color::WHITE;
-	//	if (!IsSquareAttacked(kingRow, kingCol, enemy, tempBoard))
-	//		legalMoves.push_back(move);
-	//	// No need to undo the move since we used a copy of the board
-	//}
+	std::vector<Move> legalMoves;
+	for (const Move& move : moves)
+	{
+		Square tempBoard[8][8];
+		memcpy(tempBoard, board, sizeof(Square) * 64);
+		// Apply the move
+		Piece movingPiece = tempBoard[move.startRow][move.startCol].GetPiece();
+		Piece capturedPiece = tempBoard[move.endRow][move.endCol].GetPiece();
+		tempBoard[move.endRow][move.endCol].SetPiece(movingPiece);
+		tempBoard[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		// Find king position
+		int kingRow = -1, kingCol = -1;
+		for (int r = 0; r < 8; r++)
+		{
+			for (int c = 0; c < 8; c++)
+			{
+				Piece p = tempBoard[r][c].GetPiece();
+				if (p.GetType() == Pieces::KING && p.GetColor() == color)
+				{
+					kingRow = r; kingCol = c;
+					break;
+				}
+			}
+			if (kingRow != -1) break;
+		}
+		Color enemy = (color == Color::WHITE) ? Color::BLACK : Color::WHITE;
+		if (!IsSquareAttacked(kingRow, kingCol, enemy, tempBoard))
+			legalMoves.push_back(move);
+		// No need to undo the move since we used a copy of the board
+	}
+
+	return legalMoves;
+}
+
+std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8])
+{
+	std::vector<Move> moves;
+	for (int i = 0; i < 8; ++i)
+	{
+		for (int j = 0; j < 8; ++j)
+		{
+			Piece piece = board[i][j].GetPiece();
+			if (piece.GetType() == Pieces::NONE || piece.GetColor() != color) continue; // No piece or wrong color
+
+
+			std::array<bool, 64> pieceMoves = { false };
+
+			// Generate moves for the piece
+			switch (piece.GetType())
+			{
+			case Pieces::PAWN:
+			{
+				AddPawnMoves(i, j, color, pieceMoves, board);
+
+				// Promotion
+				if ((color == Color::WHITE && i == 1) ||
+					(color == Color::BLACK && i == 6))
+				{
+					int endRow = (color == Color::WHITE) ? 0 : 7;
+
+					for (int dc = -1; dc <= 1; ++dc)
+					{
+						int endCol = j + dc;
+						if (endCol < 0 || endCol >= 8) continue;
+
+						int idx = endRow * 8 + endCol;
+						if (pieceMoves[idx])
+						{
+							for (Pieces promo : {Pieces::QUEEN, Pieces::ROOK, Pieces::BISHOP, Pieces::KNIGHT})
+							{
+								Move move;
+								move.startRow = i;
+								move.startCol = j;
+								move.endRow = endRow;
+								move.endCol = endCol;
+								move.promotion = static_cast<int>(promo);
+								moves.push_back(move);
+							}
+						}
+					}
+					continue; // Skip default pawn move gen
+				}
+				break;
+			}
+			case Pieces::KNIGHT:
+				AddKnightMoves(i, j, color, pieceMoves, board);
+				break;
+			case Pieces::BISHOP:
+				AddSlidingMoves(i, j, color, pieceMoves, bishopDirs, 4, board);
+				break;
+			case Pieces::ROOK:
+				AddSlidingMoves(i, j, color, pieceMoves, rookDirs, 4, board);
+				break;
+			case Pieces::QUEEN:
+				AddSlidingMoves(i, j, color, pieceMoves, queenDirs, 8, board);
+				break;
+			case Pieces::KING:
+				AddKingMoves(i, j, color, pieceMoves, board);
+				break;
+			}
+
+			// Convert pieceMoves to Move structs
+			for (int idx = 0; idx < 64; ++idx)
+			{
+				if (pieceMoves[idx])
+				{
+					Move move;
+					move.startRow = i;
+					move.startCol = j;
+					move.endRow = idx / 8;
+					move.endCol = idx % 8;
+					moves.push_back(move);
+				}
+			}
+		}
+	}
 
 	return moves;
 }

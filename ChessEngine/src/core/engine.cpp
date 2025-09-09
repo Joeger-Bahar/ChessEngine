@@ -96,7 +96,6 @@ void Engine::Render()
 		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(lastMove.endRow,   lastMove.endCol,   { 255, 180, 0, 100 }); });
 	}
 
-
 	graphics.Render(board);
 }
 
@@ -665,13 +664,21 @@ void Engine::SetBot(Bot* bot)
 void Engine::CheckKingInCheck()
 {
 	if (BoardCalculator::IsSquareAttacked(whiteKingPos.first, whiteKingPos.second, Color::BLACK, board))
-		checkStatus ^= (1 << 1);
+	{
+		checkStatus |= (1 << 1);
+	}
 	else
+	{
 		checkStatus &= ~(1 << 1);
+	}
 	if (BoardCalculator::IsSquareAttacked(blackKingPos.first, blackKingPos.second, Color::WHITE, board))
-		checkStatus ^= (1 << 0);
+	{
+		checkStatus |= (1 << 0);
+	}
 	else
+	{
 		checkStatus &= ~(1 << 0);
+	}
 
 	//if (checkStatus & 0b10)
 	//{

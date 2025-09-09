@@ -20,4 +20,5 @@ private:
 
 	Engine* engine;
 	Color botColor;
+	int nodesSearched = 0;
 };
