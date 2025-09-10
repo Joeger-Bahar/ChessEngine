@@ -82,7 +82,7 @@ Move Bot::GetMove()
 	auto startTime = steady_clock::now();
 	tt.NewSearch(); // age TT entries for this root search
 
-	int maxDepth = 5;
+	int maxDepth = 6;
 	Move bestMove = Move();
 	int bestScore = 0;
 	bool quitEarly = false;
@@ -113,12 +113,12 @@ Move Bot::GetMove()
 
 				foundLegal = true;
 
-				int score = Search(maxDepth - 1, Color::WHITE, alpha, beta);
+				int score = Search(depth - 1, Color::WHITE, alpha, beta);
 				engine->UndoMove();
 
 				auto currentTime = steady_clock::now();
 				auto elapsed = duration_cast<seconds>(currentTime - startTime).count();
-				if (elapsed > 8)
+				if (elapsed > 10)
 				{
 					quitEarly = true;
 					break;
@@ -146,12 +146,12 @@ Move Bot::GetMove()
 
 				foundLegal = true;
 
-				int score = Search(maxDepth - 1, Color::WHITE, alpha, beta);
+				int score = Search(depth - 1, Color::WHITE, alpha, beta);
 				engine->UndoMove();
 
 				auto currentTime = steady_clock::now();
 				auto elapsed = duration_cast<seconds>(currentTime - startTime).count();
-				if (elapsed > 8)
+				if (elapsed > 10)
 				{
 					quitEarly = true;
 					break;
@@ -167,16 +167,37 @@ Move Bot::GetMove()
 			}
 		}
 
-		if (foundLegal && !quitEarly)
+		if (foundLegal)
 		{
-			bestMove = currentBestMove;
-			bestScore = currentBestScore;
+			if (quitEarly)
+			{
+				if (botColor == Color::WHITE)
+				{
+					if (currentBestScore > bestScore)
+					{
+						bestScore = currentBestScore;
+						std::cout << "Found better move in partial search\n";
+					}
+				}
+				else
+				{
+					if (currentBestScore < bestScore)
+					{
+						bestScore = currentBestScore;
+						std::cout << "Found better move in partial search\n";
+					}
+				}
+			}
+			else
+			{
+				bestMove = currentBestMove;
+				bestScore = currentBestScore;
+			}
 		}
 
 		// Optional: print progress for debugging
-		std::cout << "Depth " << depth << " bestMove "
-			<< currentBestMove.ToString()
-			<< " score " << currentBestScore << "\n";
+		if (!quitEarly)
+			std::cout << "Depth " << depth << " bestMove " << currentBestMove.ToString() << " score " << currentBestScore << "\n";
 
 		// Mate
 		if (bestScore > 2000000000 || bestScore < -2000000000)
@@ -186,14 +207,15 @@ Move Bot::GetMove()
 		auto elapsed = duration_cast<seconds>(currentTime - startTime).count();
 		if (depth == maxDepth)
 		{
-			if (elapsed <= 8)
+			if (elapsed <= 10)
 				++maxDepth;
 		}
-		if (elapsed > 8)
+		if (elapsed > 10)
 			break;
 	}
 	std::cout << "TT searched " << nodesSearched << '\n';
 
+	nodesSearched = 0;
 	return bestMove;
 }
 

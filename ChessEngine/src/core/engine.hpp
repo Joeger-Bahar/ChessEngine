@@ -41,6 +41,7 @@ public:
 
 	GraphicsEngine graphics;
 private:
+	void UpdateEndgameStatus();
 	int PieceToIndex(const Piece& p) const;
 	uint64_t ComputeFullHash() const;
 	bool StoreMove(); // Returns if there was a second click to make a move

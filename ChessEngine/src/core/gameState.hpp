@@ -10,6 +10,7 @@ namespace GameState
 	inline int   checkStatus = 0;							 // 10 - white, 01 - black
 	inline int   enPassantTarget[2] = { -1, -1 };			 // { row, column }, -1 if no target
 	inline int   halfmoves = 0;								 // Number of halfmoves since last capture or pawn move (for 50-move rule)
+	inline bool	endgameStatus = false;						 // If the game can be considered endgame
 	inline bool  checkmate = false, draw = false;			 // Can use check status for color
 	inline bool  invalidMove = false;						 // If the last move was invalid
 	inline bool  whiteCastlingRights[2] = { true, true };	 // { queenside, kingside }
