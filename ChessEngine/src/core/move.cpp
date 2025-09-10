@@ -47,3 +47,14 @@ const char* Move::ToString() const
 	}
 	return buffer;
 }
+
+bool Move::operator==(const Move& right)
+{
+	return startCol == right.startCol &&
+		endCol == right.endCol &&
+		startRow == right.startRow &&
+		endRow == right.startRow &&
+		promotion == right.promotion &&
+		wasCastle == right.wasCastle &&
+		wasEnPassant == right.wasEnPassant;
+}

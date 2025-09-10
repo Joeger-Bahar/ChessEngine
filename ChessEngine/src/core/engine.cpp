@@ -36,7 +36,9 @@ void Engine::Update()
 
 		if (botPlaying && currentPlayer == bot->GetColor())
 		{
-			move = bot->GetMove();
+			move = bot->TTGetMove();
+			//Move otherMove = bot->GetMove();
+			//std::cout << otherMove.ToString() << "\n";
 			std::cout << move.ToString() << "\n";
 			break;
 		}

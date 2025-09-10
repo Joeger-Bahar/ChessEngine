@@ -15,7 +15,12 @@ TranspositionTable::TranspositionTable(size_t megabytes)
 {
     size_t bytes = megabytes * 1024ull * 1024ull;
     entries = bytes / sizeof(TTEntry);
-    // round down to power of 2 for fast masking what the fuck
+    unsigned long index;
+    if (_BitScanReverse64(&index, entries)) {
+        size_t p2 = 1ull << index;
+        entries = p2;
+    }
+    // round down to power of 2 for fast masking     what the fuck
     //size_t p2 = 1ull << (63 - __builtin_clzll(entries));
     //entries = p2;
     table.resize(entries);

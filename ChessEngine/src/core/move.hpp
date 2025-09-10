@@ -14,4 +14,6 @@ struct Move
 	bool wasEnPassant, wasCastle;
 
 	const char* ToString() const;
+	bool operator==(const Move& right);
+
 };

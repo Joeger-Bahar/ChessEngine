@@ -72,10 +72,179 @@ void Bot::OrderMoves(std::vector<Move>& moves)
 		});
 }
 
-// Negamax search
+// Minimax search
+//Move Bot::TTGetMove()
+//{
+//	tt.newSearch();
+//
+//	int depth = 8;
+//
+//	Move bestMove = Move();
+//	int alpha = std::numeric_limits<int>::min();
+//	int beta = std::numeric_limits<int>::max();
+//	bool foundLegal = false;
+//
+//	int bestScore;
+//
+//	std::vector<Move> moves = BoardCalculator::GetAllMoves(botColor, engine->GetBoard());
+//	OrderMoves(moves);
+//
+//	if (botColor == Color::WHITE)
+//	{
+//		bestScore = std::numeric_limits<int>::min();
+//
+//		for (Move move : moves)
+//		{
+//			engine->MakeMove(move);
+//
+//			engine->CheckKingInCheck();
+//			bool illegal = engine->InCheck(botColor);
+//
+//			if (illegal)
+//			{
+//				engine->UndoMove();
+//				continue; // skip illegal move
+//			}
+//
+//			foundLegal = true;
+//
+//			int score = TTSearch(depth - 1, Color::WHITE, alpha, beta);
+//			engine->UndoMove();
+//
+//			if (score > bestScore)
+//			{
+//				bestScore = score;
+//				bestMove = move;
+//			}
+//
+//			alpha = std::max(alpha, bestScore);
+//		}
+//	}
+//	else
+//	{
+//		bestScore = std::numeric_limits<int>::max();
+//
+//		for (Move move : moves)
+//		{
+//			engine->MakeMove(move);
+//
+//			engine->CheckKingInCheck();
+//			bool illegal = engine->InCheck(botColor);
+//
+//			if (illegal)
+//			{
+//				engine->UndoMove();
+//				continue; // skip illegal move
+//			}
+//
+//			foundLegal = true;
+//
+//			// White is always maximizing because eval is static (positive = white winning)
+//			int score = TTSearch(depth - 1, Color::WHITE, alpha, beta);
+//			engine->UndoMove();
+//
+//			if (score < bestScore)
+//			{
+//				bestScore = score;
+//				bestMove = move;
+//			}
+//
+//			beta = std::min(beta, bestScore);
+//		}
+//	}
+//
+//	std::cout << "TT Nodes searched " << nodesSearched << "\n";
+//
+//	return bestMove;
+//}
+Move Bot::TTGetMove()
+{
+	tt.newSearch(); // age TT entries for this root search
+
+	int maxDepth = 9;
+	Move bestMove = Move();
+	int bestScore = 0;
+
+	for (int depth = 1; depth <= maxDepth; ++depth) {
+		int alpha = std::numeric_limits<int>::min();
+		int beta = std::numeric_limits<int>::max();
+		bool foundLegal = false;
+
+		Move currentBestMove = Move();
+		int currentBestScore;
+
+		std::vector<Move> moves = BoardCalculator::GetAllMoves(botColor, engine->GetBoard());
+		OrderMoves(moves);
+
+		if (botColor == Color::WHITE) {
+			currentBestScore = std::numeric_limits<int>::min();
+
+			for (Move move : moves) {
+				engine->MakeMove(move);
+
+				engine->CheckKingInCheck();
+				bool illegal = engine->InCheck(botColor);
+				if (illegal) { engine->UndoMove(); continue; }
+
+				foundLegal = true;
+
+				int score = TTSearch(depth - 1, Color::WHITE, alpha, beta);
+				engine->UndoMove();
+
+				if (score > currentBestScore) {
+					currentBestScore = score;
+					currentBestMove = move;
+				}
+
+				alpha = std::max(alpha, currentBestScore);
+			}
+		}
+		else {
+			currentBestScore = std::numeric_limits<int>::max();
+
+			for (Move move : moves) {
+				engine->MakeMove(move);
+
+				engine->CheckKingInCheck();
+				bool illegal = engine->InCheck(botColor);
+				if (illegal) { engine->UndoMove(); continue; }
+
+				foundLegal = true;
+
+				int score = TTSearch(depth - 1, Color::WHITE, alpha, beta);
+				engine->UndoMove();
+
+				if (score < currentBestScore) {
+					currentBestScore = score;
+					currentBestMove = move;
+				}
+
+				beta = std::min(beta, currentBestScore);
+			}
+		}
+
+		if (foundLegal) {
+			bestMove = currentBestMove;
+			bestScore = currentBestScore;
+		}
+
+		// Optional: print progress for debugging
+		std::cout << "Depth " << depth << " bestMove "
+			<< currentBestMove.ToString()
+			<< " score " << currentBestScore << "\n";
+
+		// Mate
+		if (bestScore > 2000000000 || bestScore < -2000000000)
+			break;
+	}
+	std::cout << "TT searched " << nodesSearched << '\n';
+
+	return bestMove;
+}
+
 Move Bot::GetMove()
 {
-	int depth = 7;
+	int depth = 8;
 
 	Move bestMove = Move();
 	int alpha = std::numeric_limits<int>::min();
@@ -151,68 +320,139 @@ Move Bot::GetMove()
 		}
 	}
 
-	//std::cout << "Eval: " << bestScore << "\n";
+	std::cout << "Nodes searched " << nodesSearched << "\n";
 
 	return bestMove;
 }
 
-//int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
-//{
-//	if (depth == 0 || engine->IsOver())
-//		return engine->Eval();
-//
-//	Color movingColor = GameState::currentPlayer;
-//	bool foundLegal = false;
-//
-//	auto moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard());
-//	OrderMoves(moves);
-//
-//	int bestEval = (movingColor == maximizingColor) ? std::numeric_limits<int>::min()
-//		: std::numeric_limits<int>::max();
-//
-//	for (Move move : moves)
-//	{
-//		engine->MakeMove(move);
-//
-//		if (engine->InCheck(movingColor)) {
-//			engine->UndoMove();
-//			continue; // skip illegal
-//		}
-//
-//		foundLegal = true;
-//
-//		int eval = -Search(depth - 1, maximizingColor, -beta, -alpha);
-//
-//		engine->UndoMove();
-//
-//		if (movingColor == maximizingColor) {
-//			bestEval = std::max(bestEval, eval);
-//			alpha = std::max(alpha, eval);
-//		}
-//		else {
-//			bestEval = std::min(bestEval, eval);
-//			beta = std::min(beta, eval);
-//		}
-//
-//		if (alpha >= beta)
-//			break; // prune
-//	}
-//
-//	if (!foundLegal)
-//	{
-//		// Checkmate or stalemate
-//		if (engine->InCheck(movingColor))
-//			return (movingColor == maximizingColor) ? (std::numeric_limits<int>::min()+1000) - depth
-//			: (std::numeric_limits<int>::max()-1000) + depth;
-//		else
-//			return 0; // stalemate
-//	}
-//
-//	return bestEval;
-//}
+int Bot::TTSearch(int depth, Color maximizingColor, int alpha, int beta)
+{
+	nodesSearched++;
+	if (depth == 0 || engine->IsOver())
+	{
+		return engine->Eval();
+	}
 
+	uint64_t key = engine->GetZobristKey();
+	int ttScore;
+	uint32_t ttMove;
+	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove)) {
+		return ttScore;
+	}
+
+	Color movingColor = GameState::currentPlayer;
+	bool foundLegal = false;
+
+	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard());
+	OrderMoves(moves);
+
+	// If we probed a move from TT, move it to the front
+	if (ttMove) {
+		Move m = unpackMove(ttMove);
+		auto it = std::find_if(moves.begin(), moves.end(), [&](const Move& mv) {
+			return packMove(mv) == ttMove;
+			});
+		if (it != moves.end()) {
+			std::swap(moves[0], *it);
+		}
+	}
+
+	int bestScore;
+	uint32_t bestMove32 = 0;
+	uint8_t flag;
+
+	if (movingColor == maximizingColor) {
+		int maxEval = std::numeric_limits<int>::min();
+
+		for (Move move : moves) {
+			engine->MakeMove(move);
+			engine->CheckKingInCheck();
+			bool illegal = engine->InCheck(movingColor);
+
+			if (illegal) { engine->UndoMove(); continue; }
+
+			foundLegal = true;
+			int eval = TTSearch(depth - 1, maximizingColor, alpha, beta);
+			engine->UndoMove();
+
+			if (eval > maxEval) {
+				maxEval = eval;
+				bestMove32 = packMove(move);
+			}
+
+			alpha = std::max(alpha, eval);
+			if (beta <= alpha) break;
+		}
+
+		if (!foundLegal) {
+			// handle mate/stalemate same as before
+			engine->CheckKingInCheck();
+			if (engine->InCheck(movingColor))
+			{
+				// This is +-1000 to provide a buffer, so punishing depth doesn't overflow
+				if (movingColor == Color::BLACK)
+					maxEval = (std::numeric_limits<int>::max() - 1000) + depth;
+				else
+					maxEval = (std::numeric_limits<int>::min() + 1000) - depth;
+			}
+			else maxEval = 0; // Stalemate
+			//maxEval = (engine->InCheck(movingColor) ? /*mate score*/ : 0);
+		}
+
+		bestScore = maxEval;
+		if (bestScore <= alpha) flag = TT_ALPHA;
+		else if (bestScore >= beta) flag = TT_BETA;
+		else flag = TT_EXACT;
+	}
+	else {
+		int minEval = std::numeric_limits<int>::max();
+		for (Move move : moves) {
+			engine->MakeMove(move);
+			engine->CheckKingInCheck();
+			bool illegal = engine->InCheck(movingColor);
+
+			if (illegal) { engine->UndoMove(); continue; }
+
+			foundLegal = true;
+			int eval = TTSearch(depth - 1, maximizingColor, alpha, beta);
+			engine->UndoMove();
+
+			if (eval < minEval) {
+				minEval = eval;
+				bestMove32 = packMove(move);
+			}
+
+			beta = std::min(beta, eval);
+			if (beta <= alpha) break;
+		}
+
+		if (!foundLegal) {
+			// handle mate/stalemate same as before
+			engine->CheckKingInCheck();
+			if (engine->InCheck(movingColor))
+			{
+				// This is +-1000 to provide a buffer, so punishing depth doesn't overflow
+				if (movingColor == Color::BLACK)
+					minEval = (std::numeric_limits<int>::max() - 1000) + depth;
+				else
+					minEval = (std::numeric_limits<int>::min() + 1000) - depth;
+			}
+			else minEval = 0; // Stalemate
+			//minEval = (engine->InCheck(movingColor) ? /*mate score*/ : 0);
+		}
+
+		bestScore = minEval;
+		if (bestScore <= alpha) flag = TT_ALPHA;
+		else if (bestScore >= beta) flag = TT_BETA;
+		else flag = TT_EXACT;
+	}
+
+	tt.ttStore(key, depth, bestScore, bestMove32, flag);
+	return bestScore;
+}
 int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 {
+	++nodesSearched;
 	if (depth == 0 || engine->IsOver())
 		return engine->Eval();
 
@@ -220,39 +460,34 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 	bool foundLegal = false;
 
 	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard());
-
 	OrderMoves(moves);
 
-	if (movingColor == maximizingColor)
-	{
+	int bestScore;
+
+	if (movingColor == maximizingColor) {
 		int maxEval = std::numeric_limits<int>::min();
 
-		for (Move move : moves)
-		{
+		for (Move move : moves) {
 			engine->MakeMove(move);
-
 			engine->CheckKingInCheck();
 			bool illegal = engine->InCheck(movingColor);
 
-			if (illegal)
-			{
-				engine->UndoMove();
-				continue; // Skip illegal move
-			}
+			if (illegal) { engine->UndoMove(); continue; }
 
 			foundLegal = true;
-
 			int eval = Search(depth - 1, maximizingColor, alpha, beta);
 			engine->UndoMove();
 
-			maxEval = std::max(maxEval, eval);
-			alpha = std::max(alpha, eval);
+			if (eval > maxEval) {
+				maxEval = eval;
+			}
 
-			if (beta <= alpha)
-				break; // Prune
+			alpha = std::max(alpha, eval);
+			if (beta <= alpha) break;
 		}
-		if (!foundLegal)
-		{
+
+		if (!foundLegal) {
+			// handle mate/stalemate same as before
 			engine->CheckKingInCheck();
 			if (engine->InCheck(movingColor))
 			{
@@ -263,125 +498,139 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 					return (std::numeric_limits<int>::min() + 1000) - depth;
 			}
 			else return 0; // Stalemate
+			//maxEval = (engine->InCheck(movingColor) ? /*mate score*/ : 0);
 		}
 
-		return maxEval;
+		bestScore = maxEval;
 	}
-	else
-	{
+	else {
 		int minEval = std::numeric_limits<int>::max();
-
-		for (Move move : moves)
-		{
+		for (Move move : moves) {
 			engine->MakeMove(move);
-
 			engine->CheckKingInCheck();
 			bool illegal = engine->InCheck(movingColor);
 
-			if (illegal)
-			{
-				engine->UndoMove();
-				continue; // Skip illegal move
-			}
+			if (illegal) { engine->UndoMove(); continue; }
 
 			foundLegal = true;
-
 			int eval = Search(depth - 1, maximizingColor, alpha, beta);
 			engine->UndoMove();
 
-			minEval = std::min(minEval, eval);
-			beta = std::min(beta, eval);
+			if (eval < minEval) {
+				minEval = eval;
+			}
 
-			if (beta <= alpha)
-				break; // Prune
+			beta = std::min(beta, eval);
+			if (beta <= alpha) break;
 		}
-		if (!foundLegal)
-		{
+
+		if (!foundLegal) {
+			// handle mate/stalemate same as before
 			engine->CheckKingInCheck();
 			if (engine->InCheck(movingColor))
 			{
-				// These are possible mates, not guarunteed
+				// This is +-1000 to provide a buffer, so punishing depth doesn't overflow
 				if (movingColor == Color::BLACK)
 					return (std::numeric_limits<int>::max() - 1000) + depth;
 				else
 					return (std::numeric_limits<int>::min() + 1000) - depth;
 			}
-			return 0; // Stalemate
+			else return 0; // Stalemate
+			//minEval = (engine->InCheck(movingColor) ? /*mate score*/ : 0);
 		}
 
-		return minEval;
+		bestScore = minEval;
 	}
+
+	return bestScore;
 }
-//int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
-//{
-//	nodesSearched++;
-//	if (depth == 0 || engine->IsOver())
-//		return engine->Eval();
-//
-//	uint64_t key = engine->GetZobristKey();
-//	uint32_t ttMove32 = 0;
-//	int ttScore = 0;
-//
-//	int alphaOrig = alpha;
-//
-//	// Probe TT
-//	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove32))
-//		return ttScore;
-//		//NULL;
-//
-//	Color movingColor = GameState::currentPlayer;
-//	bool foundLegal = false;
-//
-//	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard());
-//
-//	// Move ordering: TT move first, then heuristics
-//	//if (ttMove32 != 0) {
-//	//	Move ttMove = unpackMove(ttMove32);
-//	//	auto it = std::find(moves.begin(), moves.end(), ttMove);
-//	////	if (it != moves.end())
-//	////		std::swap(moves[0], *it);
-//	//}
-//	OrderMoves(moves);
-//
-//	int bestScore = (movingColor == maximizingColor) ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
-//	Move bestMove;
-//
-//	for (Move move : moves)
+
+//	if (movingColor == maximizingColor)
 //	{
-//		engine->MakeMove(move);
-//		if (engine->InCheck(movingColor)) { engine->UndoMove(); continue; }
+//		int maxEval = std::numeric_limits<int>::min();
 //
-//		foundLegal = true;
-//		int eval = Search(depth - 1, maximizingColor, alpha, beta);
-//		engine->UndoMove();
+//		for (Move move : moves)
+//		{
+//			engine->MakeMove(move);
 //
-//		if (movingColor == maximizingColor) {
-//			if (eval > bestScore) { bestScore = eval; bestMove = move; }
+//			engine->CheckKingInCheck();
+//			bool illegal = engine->InCheck(movingColor);
+//
+//			if (illegal)
+//			{
+//				engine->UndoMove();
+//				continue; // Skip illegal move
+//			}
+//
+//			foundLegal = true;
+//
+//			int eval = Search(depth - 1, maximizingColor, alpha, beta);
+//			engine->UndoMove();
+//
+//			maxEval = std::max(maxEval, eval);
 //			alpha = std::max(alpha, eval);
+//
+//			if (beta <= alpha)
+//				break; // Prune
 //		}
-//		else {
-//			if (eval < bestScore) { bestScore = eval; bestMove = move; }
+//		if (!foundLegal)
+//		{
+//			engine->CheckKingInCheck();
+//			if (engine->InCheck(movingColor))
+//			{
+//				// This is +-1000 to provide a buffer, so punishing depth doesn't overflow
+//				if (movingColor == Color::BLACK)
+//					return (std::numeric_limits<int>::max() - 1000) + depth;
+//				else
+//					return (std::numeric_limits<int>::min() + 1000) - depth;
+//			}
+//			else return 0; // Stalemate
+//		}
+//
+//		return maxEval;
+//	}
+//	else
+//	{
+//		int minEval = std::numeric_limits<int>::max();
+//
+//		for (Move move : moves)
+//		{
+//			engine->MakeMove(move);
+//
+//			engine->CheckKingInCheck();
+//			bool illegal = engine->InCheck(movingColor);
+//
+//			if (illegal)
+//			{
+//				engine->UndoMove();
+//				continue; // Skip illegal move
+//			}
+//
+//			foundLegal = true;
+//
+//			int eval = Search(depth - 1, maximizingColor, alpha, beta);
+//			engine->UndoMove();
+//
+//			minEval = std::min(minEval, eval);
 //			beta = std::min(beta, eval);
+//
+//			if (beta <= alpha)
+//				break; // Prune
+//		}
+//		if (!foundLegal)
+//		{
+//			engine->CheckKingInCheck();
+//			if (engine->InCheck(movingColor))
+//			{
+//				// These are possible mates, not guarunteed
+//				if (movingColor == Color::BLACK)
+//					return (std::numeric_limits<int>::max() - 1000) + depth;
+//				else
+//					return (std::numeric_limits<int>::min() + 1000) - depth;
+//			}
+//			return 0; // Stalemate
 //		}
 //
-//		if (beta <= alpha) break; // alpha-beta prune
+//		return minEval;
 //	}
-//
-//	if (!foundLegal) { // mate/stalemate handling
-//		engine->CheckKingInCheck();
-//		if (engine->InCheck(movingColor))
-//			return (movingColor == maximizingColor) ? std::numeric_limits<int>::min() + depth : std::numeric_limits<int>::max() - depth;
-//		else
-//			return 0; // stalemate
-//	}
-//
-//	// Store in TT
-//	uint8_t flag;
-//	if (bestScore <= alphaOrig) flag = TT_ALPHA;
-//	else if (bestScore >= beta) flag = TT_BETA;
-//	else flag = TT_EXACT;
-//
-//	tt.ttStore(key, depth, bestScore, packMove(bestMove), flag);
-//
-//	return bestScore;
 //}

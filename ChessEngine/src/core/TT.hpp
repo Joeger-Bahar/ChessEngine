@@ -19,7 +19,7 @@ struct TranspositionTable {
     size_t entries; // number of entries (power of two)
     uint8_t currentAge = 0;
 
-    TranspositionTable(size_t megabytes = 64);
+    TranspositionTable(size_t megabytes = 128);
 
     bool ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove);
     void ttStore(uint64_t key, int depth, int score, uint32_t move32, uint8_t flag);
