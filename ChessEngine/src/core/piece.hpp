@@ -16,10 +16,12 @@ enum class Pieces {
 	NONE
 };
 
-struct Piece {
+struct Piece
+{
 	Piece(Pieces t = Pieces::NONE, Color c = Color::NONE);
 	// Comparison operators
-	friend bool operator==(const Piece& a, const Piece& b) {
+	friend bool operator==(const Piece& a, const Piece& b)
+	{
 		return a.type == b.type && a.color == b.color;
 	}
 

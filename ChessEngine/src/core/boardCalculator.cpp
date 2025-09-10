@@ -286,7 +286,7 @@ std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square bo
 	return legalMoves;
 }
 
-std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8])
+std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8], bool onlyNoisy)
 {
 	std::vector<Move> moves;
 	for (int i = 0; i < 8; ++i)
@@ -363,7 +363,31 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 					move.startCol = j;
 					move.endRow = idx / 8;
 					move.endCol = idx % 8;
-					moves.push_back(move);
+					// Capture
+					if (onlyNoisy)
+					{
+						// Capture
+						if (board[move.endRow][move.endCol].GetPiece().GetType() != Pieces::NONE)
+						{
+							moves.push_back(move);
+						}
+						// Promotion
+						if (board[move.startRow][move.startCol].GetPiece().GetType() == Pieces::PAWN)
+						{
+							if (color == Color::WHITE)
+							{
+								if (move.startRow == 1)
+									moves.push_back(move);
+							}
+							else
+							{
+								if (move.startRow == 6)
+									moves.push_back(move);
+							}
+						}
+					}
+					else
+						moves.push_back(move);
 				}
 			}
 		}

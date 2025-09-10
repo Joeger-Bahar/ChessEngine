@@ -1,6 +1,7 @@
 #include "zobrist.hpp"
 
-enum PieceTypes : int {
+enum PieceTypes : int
+{
     EMPTY = 0,
     W_PAWN = 1, W_KNIGHT = 2, W_BISHOP = 3, W_ROOK = 4, W_QUEEN = 5, W_KING = 6,
     B_PAWN = 7, B_KNIGHT = 8, B_BISHOP = 9, B_ROOK = 10, B_QUEEN = 11, B_KING = 12

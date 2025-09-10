@@ -2,7 +2,6 @@
 
 #include <vector>
 #include <string>
-//#include <chrono>
 
 #include "piece.hpp"
 #include "square.hpp"

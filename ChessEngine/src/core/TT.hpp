@@ -5,7 +5,8 @@
 
 enum TTFlag : uint8_t { TT_UNKNOWN = 0, TT_EXACT = 1, TT_ALPHA = 2, TT_BETA = 3 };
 
-struct TTEntry {
+struct TTEntry
+{
     uint64_t key;     // full zobrist key
     int32_t score;
     int16_t depth;    // ply or depth
@@ -14,19 +15,20 @@ struct TTEntry {
     uint8_t age;      // for simple replacement scheme
 };
 
-struct TranspositionTable {
+struct TranspositionTable
+{
     std::vector<TTEntry> table;
     size_t entries; // number of entries (power of two)
     uint8_t currentAge = 0;
 
-    TranspositionTable(size_t megabytes = 128);
+    TranspositionTable(int megabytes = 128);
 
     bool ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove);
     void ttStore(uint64_t key, int depth, int score, uint32_t move32, uint8_t flag);
 
-    inline size_t indexFor(uint64_t key) const;
+    inline size_t IndexFor(uint64_t key) const;
 
-    void clear();
+    void Clear();
 
-    void newSearch();
+    void NewSearch();
 };

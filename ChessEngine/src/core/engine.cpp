@@ -36,9 +36,7 @@ void Engine::Update()
 
 		if (botPlaying && currentPlayer == bot->GetColor())
 		{
-			move = bot->TTGetMove();
-			//Move otherMove = bot->GetMove();
-			//std::cout << otherMove.ToString() << "\n";
+			move = bot->GetMove();
 			std::cout << move.ToString() << "\n";
 			break;
 		}
@@ -62,9 +60,6 @@ void Engine::Update()
 	MakeMove(move);
 	//Render();
 	//Sleep(1000);
-
-	// Not necessary but good for catching bugs, mostly in cached king pos
-	CheckKingInCheck();
 
 	// Update game state after move
 	CheckCheckmate();
@@ -307,140 +302,6 @@ void Engine::ProcessMove(Move& move)
 		move.wasEnPassant = true;
 }
 
-//void Engine::MakeMove(const Move move)
-//{
-//	BoardState state;
-//
-//	const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
-//	const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
-//
-//	// 1. Move piece
-//	board[move.endRow][move.endCol].SetPiece(movingPiece);
-//	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-//
-//	state.movedPiece = static_cast<uint8_t>(movingPiece.GetType());
-//	state.capturedPiece = static_cast<uint8_t>(targetPiece.GetType());
-//	// 2. Save state to undo list
-//	// Here so when the move ^ is undone, it will be complimented with the current state
-//	// The move above will be undone, but the game state will be applied
-//	AppendUndoList(state, move);
-//
-//	// Update king position if needed
-//	if (movingPiece.GetType() == Pieces::KING)
-//	{
-//		if (currentPlayer == Color::WHITE)
-//			whiteKingPos = { move.endRow, move.endCol };
-//		else
-//			blackKingPos = { move.endRow, move.endCol };
-//	}
-//
-//	// 3. Castling rights
-//	UpdateCastlingRights(move, movingPiece, targetPiece);
-//	// Handle castling
-//	if (move.wasCastle)
-//	{
-//		bool kingside = (move.endCol == 6);
-//		int row = (currentPlayer == Color::WHITE) ? 7 : 0;
-//		int rookStartCol = kingside ? 7 : 0;
-//		int rookEndCol = kingside ? 5 : 3;
-//		// Move rook
-//		board[row][rookEndCol].SetPiece(board[row][rookStartCol].GetPiece());
-//		board[row][rookStartCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-//		// Update king position
-//		if (currentPlayer == Color::WHITE)
-//			whiteKingPos = { row, move.endCol };
-//		else
-//			blackKingPos = { row, move.endCol };
-//	}
-//
-//	// 4. En passant sqaure/capture
-//	UpdateEnPassantSquare(move);
-//	// Check for capture
-//	if (move.wasEnPassant)
-//	{
-//		int pawnRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
-//		board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-//	}
-//
-//	// 5. Pawn promotion
-//	if (move.promotion != 6)
-//	{
-//		board[move.endRow][move.endCol].SetPiece(Piece((Pieces)move.promotion, currentPlayer));
-//	}
-//
-//	// 6. Halfmove clock
-//	if (movingPiece.GetType() == Pieces::PAWN || targetPiece.GetType() != Pieces::NONE)
-//		halfmoves = 0;
-//	else if (currentPlayer == Color::BLACK)
-//		halfmoves++;
-//	if (halfmoves >= 50) // 50-move rule
-//	{
-//		draw = true;
-//		std::cout << "Game is a draw by the 50-move rule!\n";
-//		return;
-//	}
-//
-//	// 7. Save move
-//	moveHistory.push_back(move);
-//
-//	// remove old en-passant
-//	if (enPassantTarget[0] != -1)
-//		zobristKey ^= zobrist.enPassantFile[enPassantTarget[1]];
-//
-//	// remove old castling rights
-//	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
-//	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
-//	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
-//	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
-//
-//	// remove piece from start square
-//	int fromSq = move.startRow * 8 + move.startCol;
-//	zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][fromSq];
-//
-//	// if capture
-//	if (targetPiece.GetType() != Pieces::NONE)
-//		zobristKey ^= zobrist.piece[PieceToIndex(targetPiece)][move.endRow * 8 + move.endCol];
-//
-//	// if en passant capture
-//	if (move.wasEnPassant) {
-//		int capRow = (currentPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
-//		Piece capPawn(Pieces::PAWN, (currentPlayer == Color::WHITE ? Color::BLACK : Color::WHITE));
-//		zobristKey ^= zobrist.piece[PieceToIndex(capPawn)][capRow * 8 + move.endCol];
-//	}
-//
-//	// add moved piece to end square (promotion handled separately)
-//	if (move.promotion != static_cast<int>(Pieces::NONE)) {
-//		Piece promo((Pieces)move.promotion, currentPlayer);
-//		zobristKey ^= zobrist.piece[PieceToIndex(promo)][move.endRow * 8 + move.endCol];
-//	}
-//	else {
-//		zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][move.endRow * 8 + move.endCol];
-//	}
-//
-//	// update castling rights
-//	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
-//	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
-//	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
-//	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
-//
-//	// update en-passant (if new pawn double-move)
-//	if (movingPiece.GetType() == Pieces::PAWN && abs(move.startRow - move.endRow) == 2) {
-//		zobristKey ^= zobrist.enPassantFile[move.startCol];
-//	}
-//
-//	// side to move
-//	zobristKey ^= zobrist.sideToMove;
-//
-//	//std::cout << zobristKey << "\n";
-//	if (zobristKey != ComputeFullHash())
-//	{
-//		std::cout << "Doesn't match\n";
-//		std::cout << "Move key " << zobristKey << " vs full hash " << ComputeFullHash() << "\n";
-//	}
-//
-//	// 8. Change side to move
-//	ChangePlayers();
-//}
 void Engine::MakeMove(const Move move)
 {
 	// --- snapshot old state (before any modification) ---
@@ -523,25 +384,6 @@ void Engine::MakeMove(const Move move)
 
 		if (oldPlayer == Color::WHITE) whiteKingPos = { row, move.endCol };
 		else blackKingPos = { row, move.endCol };
-
-		//bool kingside = (move.endCol == 6);
-		//int row = (oldPlayer == Color::WHITE) ? 7 : 0;
-		//int rookStartCol = kingside ? 7 : 0;
-		//int rookEndCol = kingside ? 5 : 3;
-		//int rookFromSq = row * 8 + rookStartCol;
-		//int rookToSq = row * 8 + rookEndCol;
-		//Piece rook(Pieces::ROOK, oldPlayer);
-
-		//// --- update zobrist for rook ---
-		//zobristKey ^= zobrist.piece[PieceToIndex(rook)][rookFromSq]; // remove rook from start square
-		//zobristKey ^= zobrist.piece[PieceToIndex(rook)][rookToSq];   // add rook to end square
-
-		//// already have the board updates below
-		//board[row][rookEndCol].SetPiece(board[row][rookStartCol].GetPiece());
-		//board[row][rookStartCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-
-		//if (oldPlayer == Color::WHITE) whiteKingPos = { row, move.endCol };
-		//else blackKingPos = { row, move.endCol };
 	}
 
 	// 4. Update en-passant target (this will change enPassantTarget)
@@ -593,14 +435,8 @@ void Engine::MakeMove(const Move move)
 	ChangePlayers(); // flips currentPlayer
 	zobristKey ^= zobrist.sideToMove;
 
-	// --- Optional check: recompute and compare ---
-	//uint64_t recomputed = ComputeFullHash();
-	//if (zobristKey != recomputed) {
-	//	std::cout << "Hash mismatch\n";
-	//	std::cout << "inc:  " << std::hex << zobristKey << "\n";
-	//	std::cout << "full: " << std::hex << recomputed << "\n";
-	//	std::cout << GetFEN() << "\n";
-	//}
+	// Update check
+	CheckKingInCheck();
 }
 
 bool Engine::HandleSpecialNotation()
@@ -729,7 +565,6 @@ std::string Engine::GetFEN() const
 void Engine::LoadPosition(std::string fen)
 {
 	// Load the board from a FEN string
-	// Loop through the FEN string and set up the board accordingly
 	// For simplicity, this implementation assumes a valid FEN string
 	int row = 0, col = 0;
 	int gameStateIndex = 0; // To track where the game state info starts
@@ -947,15 +782,6 @@ void Engine::CheckKingInCheck()
 	{
 		checkStatus &= ~(1 << 0);
 	}
-
-	//if (checkStatus & 0b10)
-	//{
-	//	graphics.QueueRender([=] {graphics.DrawSquareHighlight(whiteKingPos.first, whiteKingPos.second, { 255, 0, 0, 100 }); });
-	//}
-	//if (checkStatus & 0b01)
-	//{
-	//	graphics.QueueRender([=] {graphics.DrawSquareHighlight(blackKingPos.first, blackKingPos.second, { 255, 0, 0, 100 }); });
-	//}
 }
 
 void Engine::UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece)
@@ -1059,11 +885,8 @@ void Engine::CheckCheckmate()
 		if (!(checkStatus & 0b11)) // Stalemate
 		{
 			draw = true;
-			//std::cout << "Game is a draw by stalemate!\n";
 			return;
 		}
 		checkmate = true;
-		// Current player in checkmate
-		//std::cout << ((currentPlayer == Color::WHITE) ? "Black" : "White") << " wins by checkmate!\n";
 	}
 }
