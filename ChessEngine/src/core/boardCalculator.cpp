@@ -363,16 +363,27 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 					move.startCol = j;
 					move.endRow = idx / 8;
 					move.endCol = idx % 8;
+
+					const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
+					const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
+
+					// Castle
+					if (movingPiece.GetType() == Pieces::KING)
+					{
+						if (abs(move.startCol - move.endCol) == 2)
+							move.wasCastle = true;
+					}
+
 					// Capture
 					if (onlyNoisy)
 					{
 						// Capture
-						if (board[move.endRow][move.endCol].GetPiece().GetType() != Pieces::NONE)
+						if (targetPiece.GetType() != Pieces::NONE)
 						{
 							moves.push_back(move);
 						}
 						// Promotion
-						if (board[move.startRow][move.startCol].GetPiece().GetType() == Pieces::PAWN)
+						if (movingPiece.GetType() == Pieces::PAWN)
 						{
 							if (color == Color::WHITE)
 							{

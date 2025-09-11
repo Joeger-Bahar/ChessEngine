@@ -47,3 +47,10 @@ const char* Move::ToString() const
 	}
 	return buffer;
 }
+
+bool Move::IsNull() const
+{
+	return startCol == 0 && startRow == 0 &&
+		endCol == 0 && endRow == 0 &&
+		!wasEnPassant && !wasCastle;
+}
