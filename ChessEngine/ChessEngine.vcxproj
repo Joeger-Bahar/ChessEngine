@@ -147,6 +147,7 @@
     <ClCompile Include="src\core\move.cpp" />
     <ClCompile Include="src\core\piece.cpp" />
     <ClCompile Include="src\core\square.cpp" />
+    <ClCompile Include="src\uci\uci.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\bot\bot.hpp" />
@@ -159,6 +160,7 @@
     <ClInclude Include="src\core\move.hpp" />
     <ClInclude Include="src\core\piece.hpp" />
     <ClInclude Include="src\core\square.hpp" />
+    <ClInclude Include="src\uci\uci.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

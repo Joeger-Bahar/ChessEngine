@@ -13,6 +13,7 @@ struct Move
 	bool wasEnPassant, wasCastle;
 
 	const char* ToString() const;
+    const char* ToUCIString() const;
 	bool IsNull() const;
     bool operator==(const Move& other) const
     {

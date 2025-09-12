@@ -13,6 +13,12 @@ Engine::Engine()
 {
 	LoadPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 	AppendUndoList(BoardState(), Move());
+
+	positionStack.clear();
+	positionCounts.clear();
+	uint64_t startKey = GetZobristKey();
+	positionStack.push_back(startKey);
+	positionCounts[startKey] = 1;
 }
 
 Engine::Engine(std::string fen)
@@ -20,6 +26,12 @@ Engine::Engine(std::string fen)
 {
 	LoadPosition(fen);
 	AppendUndoList(BoardState(), Move());
+
+	positionStack.clear();
+	positionCounts.clear();
+	uint64_t startKey = GetZobristKey();
+	positionStack.push_back(startKey);
+	positionCounts[startKey] = 1;
 }
 
 Engine::~Engine() {}
@@ -34,7 +46,10 @@ void Engine::Update()
 		if (IsOver())
 			return; // Game is finished
 
-		if (botPlaying && currentPlayer == bot->GetColor())
+		int index = (currentPlayer == Color::WHITE) ? 0 : 1;
+		Bot* bot = bots[index];
+
+		if (botPlaying[index] && bot != nullptr)
 		{
 			move = bot->GetMove();
 			std::cout << move.ToString() << "\n";
@@ -59,13 +74,14 @@ void Engine::Update()
 	// Make the move
 	MakeMove(move);
 	UpdateEndgameStatus();
-	if (endgameStatus)
-		std::cout << "Endgame\n";
-	//Render();
-	//Sleep(1000);
 
 	// Update game state after move
 	CheckCheckmate();
+	if (IsThreefold())
+	{
+		draw = true;
+		std::cout << "Draw by 3 fold repetition\n";
+	}
 }
 
 void Engine::Render()
@@ -728,6 +744,9 @@ void Engine::MakeMove(const Move move)
 
 	// Update check
 	CheckKingInCheck();
+
+	positionStack.push_back(zobristKey);
+	positionCounts[zobristKey] += 1;
 }
 
 bool Engine::HandleSpecialNotation()
@@ -766,6 +785,13 @@ bool Engine::HandleSpecialNotation()
 //	auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 //	std::cout << "Time per call: " << (ns / iterations) << " ns\n";
 //}
+
+bool Engine::IsThreefold() const
+{
+	if (positionStack.empty()) return false;
+	auto it = positionCounts.find(positionStack.back());
+	return (it != positionCounts.end() && it->second >= 3);
+}
 
 bool Engine::ValidMove(const Piece piece, const Move move)
 {
@@ -956,6 +982,17 @@ void Engine::UndoMove()
 		return; // No move to undo
 	}
 
+	if (positionStack.empty()) return;
+	uint64_t top = positionStack.back();
+	positionStack.pop_back();
+
+	auto it = positionCounts.find(top);
+	if (it != positionCounts.end())
+	{
+		if (--(it->second) == 0)
+			positionCounts.erase(it);
+	}
+
 	//undoHistory.pop_back();
 	BoardState lastState = undoHistory.back();
 	undoHistory.pop_back();
@@ -1051,8 +1088,16 @@ void Engine::UndoTurn()
 
 void Engine::SetBot(Bot* bot)
 {
-	this->bot = bot;
-	botPlaying = (bot != nullptr);
+	if (bot->GetColor() == Color::WHITE)
+	{
+		bots[0] = bot;
+		botPlaying[0] = true;
+	}
+	else
+	{
+		bots[1] = bot;
+		botPlaying[1] = true;
+	}
 }
 
 void Engine::CheckKingInCheck()

@@ -84,8 +84,10 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 {
 	Piece piece = board[row][col].GetPiece();
 	if (piece.GetType() == Pieces::NONE) return {}; // No piece to move
+
 	Color color = piece.GetColor();
 	std::array<bool, 64> moves = { false };
+
 	switch (piece.GetType())
 	{
 	case Pieces::PAWN:
@@ -143,6 +145,14 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 		Piece capturedPiece = tempBoard[destRow][destCol].GetPiece();
 		tempBoard[destRow][destCol].SetPiece(movingPiece);
 		tempBoard[row][col].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		// En passant
+		if (movingPiece.type == Pieces::PAWN &&
+			destCol != col && capturedPiece.GetType() == Pieces::NONE)
+		{
+			// Remove the pawn that was passed
+			int epRow = row;  // The pawn is on the same row as the moving pawn started
+			tempBoard[epRow][destCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+		}
 
 		// If the king moved, update its position for the check
 		int currentKingRow = kingRow;
@@ -286,9 +296,9 @@ std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square bo
 	return legalMoves;
 }
 
-std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8], bool onlyNoisy)
+std::vector<Move> BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const Square board[8][8], bool onlyNoisy)
 {
-	std::vector<Move> moves;
+	moves.clear();
 	for (int i = 0; i < 8; ++i)
 	{
 		for (int j = 0; j < 8; ++j)
@@ -371,14 +381,22 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 					if (movingPiece.GetType() == Pieces::KING)
 					{
 						if (abs(move.startCol - move.endCol) == 2)
+						{
 							move.wasCastle = true;
+						}
+					}
+					// En passant
+					if (movingPiece.GetType() == Pieces::PAWN && move.startCol != move.endCol
+						&& targetPiece.GetType() == Pieces::NONE)
+					{
+						move.wasEnPassant = true;
 					}
 
 					// Capture
 					if (onlyNoisy)
 					{
 						// Capture
-						if (targetPiece.GetType() != Pieces::NONE)
+						if (targetPiece.GetType() != Pieces::NONE || move.wasEnPassant)
 						{
 							moves.push_back(move);
 						}
@@ -407,6 +425,13 @@ std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8
 	return moves;
 }
 
+std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8], bool onlyCaptures)
+{
+	std::vector<Move> moves;
+	GetAllMoves(moves, color, board, onlyCaptures);
+	return moves;
+}
+
 uint8_t BoardCalculator::FindPiece(Piece piece, const Square board[8][8])
 {
 	for (int r = 0; r < 8; r++)
@@ -422,30 +447,36 @@ uint8_t BoardCalculator::FindPiece(Piece piece, const Square board[8][8])
 
 bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
 {
-	// Check if castling is allowed
-	if ((GameState::currentPlayer == Color::WHITE && !GameState::whiteCastlingRights[kingside ? 1 : 0]) ||
-		(GameState::currentPlayer == Color::BLACK && !GameState::blackCastlingRights[kingside ? 1 : 0]))
-	{
-		//invalidMove = true;
+	Color player = GameState::currentPlayer;
+	Color enemy = (player == Color::WHITE) ? Color::BLACK : Color::WHITE;
+	int row = (player == Color::WHITE) ? 7 : 0;
+
+	// 1. Check if castling rights exist
+	if ((player == Color::WHITE && !GameState::whiteCastlingRights[kingside ? 1 : 0]) ||
+		(player == Color::BLACK && !GameState::blackCastlingRights[kingside ? 1 : 0]))
 		return false;
+
+	// 2. King is in check
+	if (IsSquareAttacked(row, 4, enemy, board))
+		return false;
+
+	int kingColumn = 4;
+	int step = kingside ? 1 : -1;
+
+	// 3. Squares between king and rook are not empty
+	int squaresToMove = kingside ? 2 : 3;
+	for (int i = 1; i <= squaresToMove; ++i)
+	{
+		if (i != 3 && !board[row][kingColumn + (step * i)].IsEmpty())
+			return false;
 	}
 
-	int row = (GameState::currentPlayer == Color::WHITE) ? 7 : 0; // Row 7 for white, 0 for black
-	int rookColumn = (kingside) ? 7 : 0;
-	int kingColumn = 4; // Only used to avoid '4' as a pseudo magic number
-	// +1 or -1, used for stepping to check missing pieces and to move rook and king to correct space
-	int step = (kingside) ? 1 : -1; // -1 for queenside (down the columns), 1 for kingside
-
-	// Squares between king and rook not empty
-	// Only need to check 2 squares for kingside castling (f1/f8 and g1/g8)
-	int squaresToCheck = kingside ? 2 : 3;
-	for (int offset = 1; offset <= squaresToCheck; offset++)
+	// 4. Squares king moves through are attacked
+	int squaresToMoveThrough = kingside ? 2 : 2;
+	for (int i = 1; i <= squaresToMoveThrough; ++i)
 	{
-		if (!board[row][kingColumn + (step * offset)].IsEmpty())
-		{
-			//invalidMove = true;
+		if (IsSquareAttacked(row, kingColumn + (step * i), enemy, board))
 			return false;
-		}
 	}
 
 	return true;

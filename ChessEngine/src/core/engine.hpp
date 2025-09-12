@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 #include <string>
 
@@ -39,7 +40,8 @@ public:
 	std::string GetFEN() const; // Get current position in FEN notation
 	//void Benchmark();
 
-	GraphicsEngine graphics;
+	void LoadPosition(std::string fen);
+	bool IsThreefold() const;
 private:
 	void UpdateEndgameStatus();
 	int PieceToIndex(const Piece& p) const;
@@ -53,10 +55,13 @@ private:
 	void UpdateEnPassantSquare(const Move move);
 	void AppendUndoList(BoardState state, const Move move);
 
-	void LoadPosition(std::string fen);
 	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
 
 	Zobrist zobrist;
+	// For 3 move rep
+	GraphicsEngine graphics;
+	std::unordered_map<uint64_t, int> positionCounts;
+	std::vector<uint64_t> positionStack; // To know what to decrement on undo
 	uint64_t zobristKey = 0;
 	Square board[8][8];
 	std::vector<Move> moveHistory;
@@ -65,6 +70,6 @@ private:
 	std::pair<int, int> firstClick; // Not static variable for rendering purposes
 	std::pair<int, int> whiteKingPos = { -1, -1 };
 	std::pair<int, int> blackKingPos = { -1, -1 };
-	Bot* bot = nullptr;
-	bool botPlaying = false;
+	Bot* bots[2] = { nullptr, nullptr };
+	bool botPlaying[2] = { false, false };
 };

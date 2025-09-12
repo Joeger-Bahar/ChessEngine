@@ -19,6 +19,7 @@ public:
 	static std::vector<uint8_t> GetValidMoves(int row, int col, const Square board[8][8]);
 	// This is pseudo-legal moves, it does not check for checks for faster engine calculations
 	static std::vector<Move> GetAllLegalMoves(Color color, const Square board[8][8]);
+	static std::vector<Move> GetAllMoves(std::vector<Move>& moves, Color color, const Square board[8][8], bool onlyCaptures = false);
 	static std::vector<Move> GetAllMoves(Color color, const Square board[8][8], bool onlyCaptures = false);
 	static uint8_t FindPiece(Piece piece, const Square board[8][8]);
 
