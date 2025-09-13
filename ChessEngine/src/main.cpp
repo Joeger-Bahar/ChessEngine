@@ -4,6 +4,7 @@
 #include <iostream>
 
 // TODO: Don't clear and refill queued renders every frame
+// TODO: Sometimes using uint8_t for moves has very weird memory bugs, like setting the move col to 204 in GetAllMoves
 // 
 // TODO: Opening book
 // TODO: Move extension: If opponent in check/move is promotion extend search 1 further

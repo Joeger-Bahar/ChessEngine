@@ -6,8 +6,9 @@
 #include "core/piece.hpp"
 #include "core/boardCalculator.hpp"
 #include "core/engine.hpp"
-#include "graphics/graphicsEngine.hpp"
 #include "core/tt.hpp"
+#include "core/eval.hpp"
+#include "graphics/graphicsEngine.hpp"
 
 class Bot
 {

@@ -7,9 +7,9 @@
 struct Move
 {
 	Move();
-	uint8_t startCol, startRow;
-	uint8_t endCol, endRow;
-	uint8_t promotion;     // Promotion piece, if any
+	int startCol, startRow;
+	int endCol, endRow;
+	int promotion;     // Promotion piece, if any
 	bool wasEnPassant, wasCastle;
 
 	const char* ToString() const;

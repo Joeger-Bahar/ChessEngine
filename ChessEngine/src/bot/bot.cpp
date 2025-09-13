@@ -350,7 +350,7 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 
 int Bot::Qsearch(int alpha, int beta, Color maximizingPlayer)
 {
-	int baseEval = engine->Eval();  // Static eval
+	int baseEval = Eval(engine->GetBoard());  // Static eval
 
 	Color movingColor = GameState::currentPlayer;
 
