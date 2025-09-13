@@ -5,6 +5,8 @@
 #include <cmath>
 #include <Windows.h>
 
+#include <cstdint>
+
 // Make GameState variables not need  prefix
 using namespace GameState;
 
@@ -74,6 +76,7 @@ void Engine::Update()
 	// Make the move
 	MakeMove(move);
 	UpdateEndgameStatus();
+	Sleep(1000);
 
 	// Update game state after move
 	CheckCheckmate();
@@ -198,12 +201,12 @@ int Engine::PieceToIndex(const Piece& p) const
 {
 	switch (p.GetType())
 	{
-	case Pieces::PAWN:   return (p.GetColor() == Color::WHITE) ? 0 : 6;
-	case Pieces::KNIGHT: return (p.GetColor() == Color::WHITE) ? 1 : 7;
-	case Pieces::BISHOP: return (p.GetColor() == Color::WHITE) ? 2 : 8;
-	case Pieces::ROOK:   return (p.GetColor() == Color::WHITE) ? 3 : 9;
-	case Pieces::QUEEN:  return (p.GetColor() == Color::WHITE) ? 4 : 10;
-	case Pieces::KING:   return (p.GetColor() == Color::WHITE) ? 5 : 11;
+	case Pieces::PAWN:   return p.GetColor() == Color::BLACK ? 0 : 1;
+	case Pieces::KNIGHT: return p.GetColor() == Color::BLACK ? 2 : 3;
+	case Pieces::BISHOP: return p.GetColor() == Color::BLACK ? 4 : 5;
+	case Pieces::ROOK:   return p.GetColor() == Color::BLACK ? 6 : 7;
+	case Pieces::QUEEN:  return p.GetColor() == Color::BLACK ? 8 : 9;
+	case Pieces::KING:   return p.GetColor() == Color::BLACK ? 10 : 11;
 	default: return -1;
 	}
 }
@@ -211,27 +214,56 @@ int Engine::PieceToIndex(const Piece& p) const
 uint64_t Engine::ComputeFullHash() const
 {
 	uint64_t h = 0;
-	for (int r = 0; r < 8; ++r) {
-		for (int c = 0; c < 8; ++c) {
+
+	for (int r = 0; r < 8; ++r)
+	{
+		for (int c = 0; c < 8; ++c)
+		{
 			Piece piece = board[r][c].GetPiece();
-			if (piece.GetType() != Pieces::NONE) {
-				int pieceIndex = PieceToIndex(piece);
-				int sq = r * 8 + c;
-				h ^= zobrist.piece[pieceIndex][sq];
+			if (piece.GetType() != Pieces::NONE)
+			{
+				int sq = ((7-r) * 8) + c;					  // Polyglot square numbering
+				int idx = PieceToIndex(piece);			  // Polyglot piece index 0..11
+				h ^= zobrist.piece[idx][sq];
+				//std::cout << "Hashing a piece at " << sq << " " << idx << " " << std::hex << h << "\n";
+				//std::cout << piece.ToString() << "\n";
 			}
 		}
 	}
-	if (currentPlayer == Color::BLACK) h ^= zobrist.sideToMove;
 
-	// castling rights
-	if (whiteCastlingRights[1]) h ^= zobrist.castling[0]; // WK
-	if (whiteCastlingRights[0]) h ^= zobrist.castling[1]; // WQ
-	if (blackCastlingRights[1]) h ^= zobrist.castling[2]; // BK
-	if (blackCastlingRights[0]) h ^= zobrist.castling[3]; // BQ
-
-	// en passant
-	if (enPassantTarget[0] != -1 && enPassantTarget[1] != -1)
+	// side to move
+	if (currentPlayer == Color::WHITE)
 	{
+		//std::cout << "Adding side to move\n";
+		h ^= zobrist.sideToMove;
+	}
+
+	// castling rights (Polyglot order: WK, WQ, BK, BQ)
+	if (whiteCastlingRights[1])
+	{
+		//std::cout << "Hasing WK\n";
+		h ^= zobrist.castling[0]; // WK
+	}
+	if (whiteCastlingRights[0])
+	{
+		//std::cout << "Hasing WQ\n";
+		h ^= zobrist.castling[1]; // WQ
+	}
+	if (blackCastlingRights[1])
+	{
+		//std::cout << "Hasing BK\n";
+		h ^= zobrist.castling[2]; // BK
+	}
+	if (blackCastlingRights[0])
+	{
+		//std::cout << "Hasing BQ\n";
+		h ^= zobrist.castling[3]; // BQ
+	}
+
+	// en passant (only the file)
+	if (enPassantTarget[0] != -1)
+	{
+		//std::cout << "Adding en passant\n";
 		int file = enPassantTarget[1];
 		h ^= zobrist.enPassantFile[file];
 	}
@@ -510,7 +542,7 @@ void Engine::MakeMove(const Move move)
 	}
 
 	// --- Finally, flip side-to-move in engine state and in the hash consistently ---
-	ChangePlayers(); // flips currentPlayer
+	ChangePlayers(); // Flips currentPlayer
 	zobristKey ^= zobrist.sideToMove;
 
 	// Update check

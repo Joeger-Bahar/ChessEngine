@@ -6,7 +6,8 @@
 
 struct Move
 {
-	Move();
+	Move(int startCol = 0, int startRow = 0, int endCol = 0, int endRow = 0, int promotion = 6,
+        bool wasEnPassant = false, bool wasCastle = false);
 	int startCol, startRow;
 	int endCol, endRow;
 	int promotion;     // Promotion piece, if any

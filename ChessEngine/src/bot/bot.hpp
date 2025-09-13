@@ -3,6 +3,8 @@
 #include <chrono>
 #include <vector>
 
+#include "opening.hpp"
+
 #include "core/piece.hpp"
 #include "core/boardCalculator.hpp"
 #include "core/engine.hpp"

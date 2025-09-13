@@ -109,6 +109,13 @@ Move Bot::GetMoveUCI(int wtime, int btime)
 
 Move Bot::GetMove()
 {
+	Move bookMove = GetBookMove(engine);
+	if (!bookMove.IsNull())
+	{
+		//std::cout << "Using opening move\n";
+		return bookMove; // Play instantly
+	}
+
 	quitEarly = false;
 	startTime = steady_clock::now();
 	tt.NewSearch(); // age TT entries for this root search

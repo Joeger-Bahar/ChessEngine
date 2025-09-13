@@ -39,6 +39,7 @@ public:
 	const Color GetCurrentPlayer() const { return GameState::currentPlayer; }
 	const uint64_t GetZobristKey() { return zobristKey; }
 	std::string GetFEN() const; // Get current position in FEN notation
+	uint64_t ComputeFullHash() const;
 
 	bool IsThreefold() const;
 	inline const bool IsOver() const { return GameState::checkmate || GameState::draw; }
@@ -59,7 +60,6 @@ private:
 
 	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
 	
-	uint64_t ComputeFullHash() const;
 
 	Square board[8][8];
 	GraphicsEngine graphics;

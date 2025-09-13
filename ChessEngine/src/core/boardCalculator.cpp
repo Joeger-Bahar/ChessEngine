@@ -368,7 +368,7 @@ std::vector<Move> BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color c
 			{
 				if (pieceMoves[idx])
 				{
-					Move move;
+					Move move{};
 					move.startRow = i;
 					move.startCol = j;
 					move.endRow = idx / 8;

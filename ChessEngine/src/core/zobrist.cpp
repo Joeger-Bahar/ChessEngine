@@ -1,13 +1,6 @@
 #include "zobrist.hpp"
 
-enum PieceTypes : int
-{
-    EMPTY = 0,
-    W_PAWN = 1, W_KNIGHT = 2, W_BISHOP = 3, W_ROOK = 4, W_QUEEN = 5, W_KING = 6,
-    B_PAWN = 7, B_KNIGHT = 8, B_BISHOP = 9, B_ROOK = 10, B_QUEEN = 11, B_KING = 12
-};
-inline bool is_white_piece(int p) { return p >= W_PAWN && p <= W_KING; }
-inline bool is_black_piece(int p) { return p >= B_PAWN && p <= B_KING; }
+#include <iostream>
 
 Zobrist::Zobrist()
 {
@@ -16,13 +9,17 @@ Zobrist::Zobrist()
 
 void Zobrist::init()
 {
-    std::mt19937_64 rng(0xC0FFEE); // fixed seed for reproducibility; change to random_device if desired
-    std::uniform_int_distribution<uint64_t> dist;
     for (int p = 0; p < 12; ++p)
         for (int s = 0; s < 64; ++s)
-            piece[p][s] = dist(rng);
+            piece[p][s] = Random64[(p * 64) + s];
 
-    sideToMove = dist(rng);
-    for (int i = 0; i < 4; ++i) castling[i] = dist(rng);
-    for (int f = 0; f < 8; ++f) enPassantFile[f] = dist(rng);
+    castling[0] = Random64[768]; // WK
+    castling[1] = Random64[769]; // WQ
+    castling[2] = Random64[770]; // BK
+    castling[3] = Random64[771]; // BQ
+
+    for (int f = 0; f < 8; ++f)
+        enPassantFile[f] = Random64[772 + f];
+
+    sideToMove = Random64[780];
 }

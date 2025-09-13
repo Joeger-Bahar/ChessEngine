@@ -1,9 +1,9 @@
 #include "move.hpp"
 
-Move::Move()
-	: startCol(0), startRow(0), endCol(0), endRow(0), promotion(6), wasEnPassant(false), wasCastle(false)
-{
-}
+Move::Move(int startCol, int startRow, int endCol, int endRow, int promotion, bool wasEnPassant, bool wasCastle)
+	: startCol(startCol), startRow(startRow), endCol(endCol), endRow(endRow), promotion(promotion),
+	wasEnPassant(wasEnPassant), wasCastle(wasCastle)
+{}
 
 const char* Move::ToString() const
 {
