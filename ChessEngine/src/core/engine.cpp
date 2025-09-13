@@ -344,7 +344,6 @@ int Engine::Eval()
 	return score;
 }
 
-
 void Engine::UpdateEndgameStatus()
 {
 	int whitePawns = 0, blackPawns = 0;

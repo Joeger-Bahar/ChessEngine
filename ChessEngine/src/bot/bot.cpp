@@ -103,7 +103,7 @@ Move Bot::GetMoveUCI(int wtime, int btime)
 	} else {
 		time_for_move = btime / 20;
 	}
-	timePerTurn = 5;
+	timePerTurn = 500;
 	return GetMove();
 }
 
@@ -132,79 +132,58 @@ Move Bot::GetMove()
 		else
 			OrderMoves(moves);
 
-		if (botColor == Color::WHITE)
+		bool isWhite = botColor == Color::WHITE;
+
+		if (isWhite) currentBestScore = std::numeric_limits<int>::min();
+		else         currentBestScore = std::numeric_limits<int>::max();
+
+		for (Move move : moves)
 		{
-			currentBestScore = std::numeric_limits<int>::min();
+			engine->MakeMove(move);
 
-			for (Move move : moves)
+			if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
+
+			foundLegal = true;
+
+			int score = Search(depth - 1, Color::WHITE, alpha, beta);
+			engine->UndoMove();
+
+			if (quitEarly)
+				break;
+
+			auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
+			if (elapsed >= timePerTurn)
 			{
-				engine->MakeMove(move);
+				quitEarly = true;
+				break;
+			}
 
-				if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
-
-				foundLegal = true;
-
-				int score = Search(depth - 1, Color::WHITE, alpha, beta);
-				engine->UndoMove();
-
-				if (quitEarly)
-					break;
-				auto elapsed = duration_cast<seconds>(steady_clock::now() - startTime).count();
-				if (elapsed > timePerTurn)
-				{
-					quitEarly = true;
-					break;
-				}
-
+			if (isWhite)
+			{
 				if (score > currentBestScore)
 				{
 					currentBestScore = score;
 					currentBestMove = move;
 				}
-
-				alpha = std::max(alpha, currentBestScore);
 			}
-		}
-		else
-		{
-			currentBestScore = std::numeric_limits<int>::max();
-
-			for (Move move : moves)
+			else
 			{
-				engine->MakeMove(move);
-
-				if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
-
-				foundLegal = true;
-
-				int score = Search(depth - 1, Color::WHITE, alpha, beta);
-				engine->UndoMove();
-
-				if (quitEarly)
-					break;
-				auto elapsed = duration_cast<seconds>(steady_clock::now() - startTime).count();
-				if (elapsed > timePerTurn)
-				{
-					quitEarly = true;
-					break;
-				}
-
 				if (score < currentBestScore)
 				{
 					currentBestScore = score;
 					currentBestMove = move;
 				}
-
-				beta = std::min(beta, currentBestScore);
 			}
-		}
 
+			if (isWhite) alpha = std::max(alpha, currentBestScore);
+			else		 beta  = std::min(beta, currentBestScore);
+		}
 
 		if (foundLegal)
 		{
 			if (quitEarly)
 			{
-				if (botColor == Color::WHITE)
+				if (isWhite)
 				{
 					if (currentBestScore > bestScore)
 					{
@@ -231,17 +210,20 @@ Move Bot::GetMove()
 		if (quitEarly)
 			break;
 
-		// Mate
-		if (bestScore > 2000000000 || bestScore < -2000000000)
+		// Extradite mate
+		// Cast to avoid integer overflow
+		if (std::abs((long long)bestScore) > 2000000000)
 			break;
 
-		auto elapsed = duration_cast<seconds>(steady_clock::now() - startTime).count();
+		// Keep searching until limit
+		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
 		if (depth == maxDepth)
 		{
-			if (elapsed <= timePerTurn)
+			if (elapsed < timePerTurn)
 				++maxDepth;
 		}
-		if (elapsed > timePerTurn)
+		// Stop searching if time limit is reached
+		if (elapsed >= timePerTurn)
 			break;
 	}
 
@@ -253,10 +235,10 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 {
 	nodesSearched++;
 	// Check time every 1028 nodes (& faster than %)
-	if ((nodesSearched & 0x1023) == 0)
+	if ((nodesSearched & 0x1028) == 0)
 	{
-		auto elapsed = duration_cast<seconds>(steady_clock::now() - startTime).count();
-		if (elapsed > timePerTurn)
+		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
+		if (elapsed >= timePerTurn)
 		{
 			quitEarly = true;
 			return 0;
@@ -281,7 +263,8 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 	Color movingColor = GameState::currentPlayer;
 	bool foundLegal = false;
 
-	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard());
+	std::vector<Move>& moves = moveLists[depth];
+	BoardCalculator::GetAllMoves(moves, movingColor, engine->GetBoard());
 	OrderMoves(moves);
 
 	// If we probed a move from TT, move it to the front
@@ -291,110 +274,75 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 		auto it = std::find_if(moves.begin(), moves.end(), [&](const Move& mv) {
 			return PackMove(mv) == ttMove;
 			});
-		if (it != moves.end()) {
+		if (it != moves.end())
 			std::swap(moves[0], *it);
-		}
 	}
 
 	int bestScore;
 	uint32_t bestMove32 = 0;
 	uint8_t flag;
 
-	if (movingColor == maximizingColor)
+	bool maximizing = movingColor == maximizingColor;
+
+	int bestEval;
+	if (maximizing) bestEval = std::numeric_limits<int>::min();
+	else			bestEval = std::numeric_limits<int>::max();
+
+	// Loop through moves
+	for (Move move : moves)
 	{
-		int maxEval = std::numeric_limits<int>::min();
+		engine->MakeMove(move);
 
-		for (Move move : moves)
+		if (engine->InCheck(movingColor)) { engine->UndoMove(); continue; }
+
+		foundLegal = true;
+		int eval = Search(depth - 1, maximizingColor, alpha, beta);
+		engine->UndoMove();
+
+		if (quitEarly)
+			return 0;
+
+		if (maximizing)
 		{
-			engine->MakeMove(move);
-
-			bool illegal = engine->InCheck(movingColor);
-			if (illegal) { engine->UndoMove(); continue; }
-
-			foundLegal = true;
-			int eval = Search(depth - 1, maximizingColor, alpha, beta);
-			engine->UndoMove();
-
-			if (quitEarly)
-				return 0;
-
-			if (eval > maxEval)
+			if (eval > bestEval)
 			{
-				maxEval = eval;
+				bestEval = eval;
 				bestMove32 = PackMove(move);
 			}
-
-			alpha = std::max(alpha, eval);
-			if (beta <= alpha) break;
 		}
-
-		if (!foundLegal)
+		else
 		{
-			// handle mate/stalemate same as before
-			engine->CheckKingInCheck();
-			if (engine->InCheck(movingColor))
+			if (eval < bestEval)
 			{
-				// This is +-1000 to provide a buffer, so punishing depth doesn't overflow
-				if (movingColor == Color::BLACK)
-					maxEval = (std::numeric_limits<int>::max() - 1000) + depth;
-				else
-					maxEval = (std::numeric_limits<int>::min() + 1000) - depth;
-			}
-			else maxEval = 0; // Stalemate
-		}
-
-		bestScore = maxEval;
-		if (bestScore <= alpha) flag = TT_ALPHA;
-		else if (bestScore >= beta) flag = TT_BETA;
-		else flag = TT_EXACT;
-	}
-	else
-	{
-		int minEval = std::numeric_limits<int>::max();
-		for (Move move : moves)
-		{
-			engine->MakeMove(move);
-
-			bool illegal = engine->InCheck(movingColor);
-			if (illegal) { engine->UndoMove(); continue; }
-
-			foundLegal = true;
-			int eval = Search(depth - 1, maximizingColor, alpha, beta);
-			engine->UndoMove();
-
-			if (quitEarly)
-				return 0;
-
-			if (eval < minEval)
-			{
-				minEval = eval;
+				bestEval = eval;
 				bestMove32 = PackMove(move);
 			}
-
-			beta = std::min(beta, eval);
-			if (beta <= alpha) break;
 		}
 
-		if (!foundLegal)
-		{
-			// handle mate/stalemate same as before
-			engine->CheckKingInCheck();
-			if (engine->InCheck(movingColor))
-			{
-				// This is +-1000 to provide a buffer, so punishing depth doesn't overflow
-				if (movingColor == Color::BLACK)
-					minEval = (std::numeric_limits<int>::max() - 1000) + depth;
-				else
-					minEval = (std::numeric_limits<int>::min() + 1000) - depth;
-			}
-			else minEval = 0; // Stalemate
-		}
-
-		bestScore = minEval;
-		if (bestScore <= alpha) flag = TT_ALPHA;
-		else if (bestScore >= beta) flag = TT_BETA;
-		else flag = TT_EXACT;
+		if (maximizing) alpha = std::max(alpha, eval);
+		else			  beta  = std::min(beta, eval);
+		if (beta <= alpha) break;
 	}
+
+	// Check checkmate/stalemate
+	if (!foundLegal)
+	{
+		engine->CheckKingInCheck();
+		if (engine->InCheck(movingColor))
+		{
+			if (movingColor == Color::BLACK)
+				bestEval = std::numeric_limits<int>::max() - depth;
+			else
+				bestEval = -(std::numeric_limits<int>::max() - depth);
+		}
+		else bestEval = 0; // Stalemate
+	}
+
+	// Update TT
+	bestScore = bestEval;
+	if (bestScore <= alpha) flag = TT_ALPHA;
+	else if (bestScore >= beta) flag = TT_BETA;
+	else flag = TT_EXACT;
 
 	tt.ttStore(key, depth, bestScore, bestMove32, flag);
 	return bestScore;
@@ -402,23 +350,24 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 
 int Bot::Qsearch(int alpha, int beta, Color maximizingPlayer)
 {
-	int stand_pat = engine->Eval();  // Static eval
+	int baseEval = engine->Eval();  // Static eval
 
 	Color movingColor = GameState::currentPlayer;
+
 	// Fail-hard beta cutoff
 	if (movingColor == maximizingPlayer)
 	{
-		if (stand_pat >= beta)
+		if (baseEval >= beta)
 			return beta;
-		if (stand_pat > alpha)
-			alpha = stand_pat;
+		if (baseEval > alpha)
+			alpha = baseEval;
 	}
 	else
 	{
-		if (stand_pat <= alpha)
+		if (baseEval <= alpha)
 			return alpha;
-		if (stand_pat < beta)
-			beta = stand_pat;
+		if (baseEval < beta)
+			beta = baseEval;
 	}
 
 	// Generate only "noisy" moves (captures, promotions, maybe checks)
