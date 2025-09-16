@@ -38,6 +38,44 @@ Engine::Engine(std::string fen)
 
 Engine::~Engine() {}
 
+void Engine::Reset()
+{
+	// Clear board + load starting position
+	LoadPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+
+	// Reset zobrist key
+	zobristKey = ComputeFullHash();
+
+	// Clear repetition tracking
+	positionCounts.clear();
+	positionStack.clear();
+
+	// Clear move/undo history
+	moveHistory.clear();
+	undoHistory.clear();
+
+	// Reset king positions
+	whiteKingPos = { -1, -1 };
+	blackKingPos = { -1, -1 };
+
+	// Reset notation/UI helpers
+	notationMove.clear();
+	firstClick = { -1, -1 };
+
+	// Reset game state flags
+	GameState::currentPlayer = Color::WHITE;
+	GameState::checkmate = false;
+	GameState::draw = false;
+	GameState::checkStatus = 0;
+
+	// Reset bot flags
+	botPlaying[0] = false;
+	botPlaying[1] = false;
+
+	// Note: don't delete `bots[]` since they are set externally
+}
+
+
 void Engine::Update()
 {
 	Move move;
@@ -75,8 +113,11 @@ void Engine::Update()
 
 	// Make the move
 	MakeMove(move);
+	CheckKingInCheck();
 	UpdateEndgameStatus();
-	Sleep(1000);
+	std::cout << move.ToUCIString() << '\n';
+	//Render();
+	//Sleep(2000);
 
 	// Update game state after move
 	CheckCheckmate();
@@ -656,6 +697,7 @@ std::string Engine::GetFEN() const
 		fen += " ";
 		fen += file;
 		fen += rank;
+		fen += " ";
 	}
 	else
 	{
@@ -670,16 +712,19 @@ std::string Engine::GetFEN() const
 
 void Engine::LoadPosition(std::string fen)
 {
-	// Load the board from a FEN string
-	// For simplicity, this implementation assumes a valid FEN string
+	// Split FEN into fields
+	std::istringstream fenStream(fen);
+	std::string placement, activeColor, castling, enPassant, halfmoveStr, fullmoveStr;
+
+	fenStream >> placement >> activeColor >> castling >> enPassant >> halfmoveStr >> fullmoveStr;
+
+	// 1. Piece placement
 	int row = 0, col = 0;
-	int gameStateIndex = 0; // To track where the game state info starts
-	for (char c : fen)
+	for (char c : placement)
 	{
-		if (c == ' ') break;
-		gameStateIndex++;
-		if (c == '/') { row++; col = 0; continue; } // Next row
-		if (isdigit(c)) { col += c - '0'; continue; } // Empty squares
+		if (c == '/') { row++; col = 0; continue; }
+		if (isdigit(c)) { col += c - '0'; continue; }
+
 		Color color = isupper(c) ? Color::WHITE : Color::BLACK;
 		Pieces pieceType;
 		switch (tolower(c))
@@ -701,50 +746,40 @@ void Engine::LoadPosition(std::string fen)
 		col++;
 	}
 
-	// Parse game state info
-	// After string sanitization, w KQkq - 0 1 turns into w-01
-	std::string fenGameState = fen.substr(gameStateIndex + 1);
-	if (fenGameState.length() < 4) return; // Invalid game state info
-	// Remove spaces
-	fenGameState.erase(remove(fenGameState.begin(), fenGameState.end(), ' '), fenGameState.end());
-	// Active color
-	currentPlayer = (fenGameState[0] == 'w') ? Color::WHITE : Color::BLACK;
-	// Castling rights
-	whiteCastlingRights[0] = (fenGameState.find('Q') != std::string::npos);
-	whiteCastlingRights[1] = (fenGameState.find('K') != std::string::npos);
-	blackCastlingRights[0] = (fenGameState.find('q') != std::string::npos);
-	blackCastlingRights[1] = (fenGameState.find('k') != std::string::npos);
-	// Remove all castling notation from string
-	fenGameState.erase(remove_if(fenGameState.begin(), fenGameState.end(),
-		[](char ch) { return ch == 'K' || ch == 'Q' || ch == 'k' || ch == 'q'; }), fenGameState.end());
+	// 2. Active color
+	currentPlayer = (activeColor == "w") ? Color::WHITE : Color::BLACK;
 
-	// En passant target, halfmoves and fullmoves
+	// 3. Castling rights
+	whiteCastlingRights[0] = (castling.find('Q') != std::string::npos);
+	whiteCastlingRights[1] = (castling.find('K') != std::string::npos);
+	blackCastlingRights[0] = (castling.find('q') != std::string::npos);
+	blackCastlingRights[1] = (castling.find('k') != std::string::npos);
+	// If castling = "-", no rights at all
+
+	// 4. En passant target
 	moveHistory.clear();
 	undoHistory.clear();
-	if (fenGameState[1] != '-') // If there is an en passant target
+	if (enPassant != "-")
 	{
-		enPassantTarget[1] = fenGameState[1] - 'a'; // Column
-		enPassantTarget[0] = 8 - (fenGameState[2] - '0'); // Row
-
-		halfmoves = std::stoi(fenGameState.substr(3, 1));
-
-		int fullmoves = std::stoi(fenGameState.substr(4));
-		//for (int i = 0; i < fullmoves * 2; i++)
-		//	moveHistory.push_back(Move());
+		enPassantTarget[1] = enPassant[0] - 'a';        // File
+		enPassantTarget[0] = 8 - (enPassant[1] - '0');  // Rank
 	}
 	else
 	{
 		enPassantTarget[0] = -1;
 		enPassantTarget[1] = -1;
-
-		halfmoves = std::stoi(fenGameState.substr(2, 1));
-
-		int fullmoves = std::stoi(fenGameState.substr(3));
-
-		//for (int i = 0; i < fullmoves * 2; i++)
-		//	moveHistory.push_back(Move());
 	}
+
+	// 5 & 6. Halfmove and fullmove counters
+	halfmoves = std::stoi(halfmoveStr);
+	int fullmoves = std::stoi(fullmoveStr);
+
+	// Optionally pre-fill move history
+	// for (int i = 0; i < fullmoves * 2; i++)
+	//     moveHistory.push_back(Move());
+
 	zobristKey = ComputeFullHash();
+	CheckKingInCheck();
 }
 
 void Engine::AppendUndoList(BoardState state, const Move move)
@@ -872,7 +907,8 @@ void Engine::UndoMove()
 void Engine::UndoTurn()
 {
 	UndoMove();
-	UndoMove();
+	if (undoHistory.size() > 1)
+		UndoMove();
 }
 
 void Engine::SetBot(Bot* bot)

@@ -1,8 +1,10 @@
 #pragma once
 
 #include "piece.hpp"
+#include "square.hpp"
 
 #include <cstdint>
+#include <string>
 
 struct Move
 {
@@ -15,6 +17,7 @@ struct Move
 
 	const char* ToString() const;
     const char* ToUCIString() const;
+    static Move FromUCI(const std::string& uci, const Square board[8][8]);
 	bool IsNull() const;
     bool operator==(const Move& other) const
     {

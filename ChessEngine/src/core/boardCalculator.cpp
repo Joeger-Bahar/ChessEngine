@@ -1,8 +1,20 @@
 #include "boardCalculator.hpp"
 
 #include <iostream>
+#include <map>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <cstdio>
+#include <memory>
+#include <stdexcept>
+#include <array>
+#include <fstream>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "gameState.hpp"
+#include "engine.hpp"
 
 // Define offsets and directions
 const int BoardCalculator::knightOffsets[8][2] = {
@@ -176,124 +188,164 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 	return validMoves;
 }
 
-std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square board[8][8])
+struct TmpFileGuard
+{
+	const std::string filename;
+	TmpFileGuard(std::string fname) : filename(std::move(fname)) {}
+	~TmpFileGuard()
+	{
+		std::remove(filename.c_str());
+	}
+};
+
+
+//StockfishPerftResult BoardCalculator::StockfishPerft(const std::string& stockfishPath, const std::string& fen, int depth)
+//{
+//	const char* tmpFilename = "stockfish_uci_commands.txt";
+//	TmpFileGuard fileGuard(tmpFilename); // Ensures file is deleted when function exits
+//
+//	// --- 1. Write the UCI commands to a temporary file ---
+//	{ // Use a scope to ensure the file is closed before we use it
+//		std::ofstream cmdFile(tmpFilename);
+//		if (!cmdFile) {
+//			throw std::runtime_error("Failed to create temporary command file.");
+//		}
+//		cmdFile << "position fen " << fen << std::endl;
+//		cmdFile << "go perft " << std::to_string(depth) << std::endl;
+//		cmdFile << "quit" << std::endl; // Tell Stockfish to exit cleanly
+//	}
+//
+//	// --- 2. Build the shell command to run Stockfish with input redirection ---
+//	// The "<" tells the shell to feed our file into the program's standard input
+//	std::string command = "\"" + stockfishPath + "\" < " + tmpFilename;
+//
+//	// --- 3. Execute the command and open a pipe to read its output ---
+//	std::string result;
+//	std::array<char, 256> buffer;
+//
+//	// The unique_ptr ensures _pclose is called automatically, even if an error occurs
+//	std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), _pclose);
+//	if (!pipe)
+//	{
+//		throw std::runtime_error("Failed to start Stockfish process with _popen.");
+//	}
+//
+//	// --- 4. Read the entire output from the pipe ---
+//	while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+//	{
+//		result += buffer.data();
+//	}
+//
+//	StockfishPerftResult out;
+//	out.nodes = 0;
+//
+//	std::istringstream iss(result);
+//	std::string line;
+//	while (std::getline(iss, line))
+//	{
+//		// Trim whitespace
+//		if (line.empty()) continue;
+//
+//		// Look for final nodes line: "Nodes searched: N"
+//		const std::string searchString = "Nodes searched: ";
+//		size_t pos = line.find(searchString);
+//		if (pos != std::string::npos)
+//		{
+//			std::string numberStr = line.substr(pos + searchString.length());
+//			out.nodes = std::stoll(numberStr);
+//			return out;
+//		}
+//
+//		// Look for move lines: e.g. "e2e4: 20"
+//		size_t colonPos = line.find(':');
+//		if (colonPos != std::string::npos)
+//		{
+//			if (colonPos > 6) continue; // If debugging statement
+//			std::string move = line.substr(0, colonPos);
+//			// remove whitespace if any
+//			move.erase(remove_if(move.begin(), move.end(), ::isspace), move.end());
+//			if (!move.empty())
+//			{
+//				out.moves.push_back(move);
+//			}
+//			continue;
+//		}
+//
+//	}
+//
+//	return out;
+//}
+
+// Compare your engine's moves vs Stockfish's moves
+void BoardCalculator::CompareMoveLists(const std::vector<Move>& myMoves,
+	const std::vector<std::string>& sfMoves)
+{
+	// Convert myMoves to UCI strings
+	std::unordered_set<std::string> mySet;
+	for (const auto& move : myMoves)
+	{
+		mySet.insert(move.ToUCIString());
+	}
+
+	// Put Stockfish moves into a set
+	std::unordered_set<std::string> sfSet(sfMoves.begin(), sfMoves.end());
+
+	// Find moves in my engine but not in Stockfish
+	std::vector<std::string> onlyMine;
+	for (const auto& m : mySet)
+	{
+		if (sfSet.find(m) == sfSet.end())
+		{
+			onlyMine.push_back(m);
+		}
+	}
+
+	// Find moves in Stockfish but not in my engine
+	std::vector<std::string> onlyStockfish;
+	for (const auto& m : sfSet)
+	{
+		if (mySet.find(m) == mySet.end())
+		{
+			onlyStockfish.push_back(m);
+		}
+	}
+
+	// Print results
+	if (onlyMine.empty() && onlyStockfish.empty())
+	{
+		std::cout << "Move lists match!\n";
+	}
+	else
+	{
+		if (!onlyMine.empty())
+		{
+			std::cout << "Extra moves in my engine:\n";
+			for (auto& m : onlyMine) std::cout << "  " << m << "\n";
+		}
+		if (!onlyStockfish.empty())
+		{
+			std::cout << "Missing moves (Stockfish has these but I don't):\n";
+			for (auto& m : onlyStockfish) std::cout << "  " << m << "\n";
+		}
+	}
+}
+
+std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square board[8][8], Engine* engine)
 {
 	std::vector<Move> moves;
-	for (int i = 0; i < 8; ++i)
-	{
-		for (int j = 0; j < 8; ++j)
-		{
-			Piece piece = board[i][j].GetPiece();
-			if (piece.GetType() == Pieces::NONE || piece.GetColor() != color) continue; // No piece or wrong color
-
-
-			std::array<bool, 64> pieceMoves = { false };
-
-			// Generate moves for the piece
-			switch (piece.GetType())
+	GetAllMoves(moves, color, board);
+	moves.erase(
+		std::remove_if(moves.begin(), moves.end(),
+			[&](Move move)
 			{
-			case Pieces::PAWN:
-			{
-				AddPawnMoves(i, j, color, pieceMoves, board);
-
-				// Promotion
-				if ((color == Color::WHITE && i == 1) ||
-				    (color == Color::BLACK && i == 6))
-				{
-					int endRow = (color == Color::WHITE) ? 0 : 7;
-
-					for (int dc = -1; dc <= 1; ++dc)
-					{
-						int endCol = j + dc;
-						if (endCol < 0 || endCol >= 8) continue;
-
-						int idx = endRow * 8 + endCol;
-						if (pieceMoves[idx])
-						{
-							for (Pieces promo : {Pieces::QUEEN, Pieces::ROOK, Pieces::BISHOP, Pieces::KNIGHT})
-							{
-								Move move;
-								move.startRow = i;
-								move.startCol = j;
-								move.endRow = endRow;
-								move.endCol = endCol;
-								move.promotion = static_cast<int>(promo);
-								moves.push_back(move);
-							}
-						}
-					}
-					continue; // Skip default pawn move gen
-				}
-				break;
-			}
-			case Pieces::KNIGHT:
-				AddKnightMoves(i, j, color, pieceMoves, board);
-				break;
-			case Pieces::BISHOP:
-				AddSlidingMoves(i, j, color, pieceMoves, bishopDirs, 4, board);
-				break;
-			case Pieces::ROOK:
-				AddSlidingMoves(i, j, color, pieceMoves, rookDirs, 4, board);
-				break;
-			case Pieces::QUEEN:
-				AddSlidingMoves(i, j, color, pieceMoves, queenDirs, 8, board);
-				break;
-			case Pieces::KING:
-				AddKingMoves(i, j, color, pieceMoves, board);
-				break;
-			}
-
-			// Convert pieceMoves to Move structs
-			for (int idx = 0; idx < 64; ++idx)
-			{
-				if (pieceMoves[idx])
-				{
-					Move move;
-					move.startRow = i;
-					move.startCol = j;
-					move.endRow = idx / 8;
-					move.endCol = idx % 8;
-					moves.push_back(move);
-				}
-			}
-		}
-	}
-
-	// Filter out moves that leave king in check
-	// This is not strictly necessary for pseudo-legal moves, but can be useful
-	// for certain engine algorithms that expect only legal moves.
-	std::vector<Move> legalMoves;
-	for (const Move& move : moves)
-	{
-		Square tempBoard[8][8];
-		memcpy(tempBoard, board, sizeof(Square) * 64);
-		// Apply the move
-		Piece movingPiece = tempBoard[move.startRow][move.startCol].GetPiece();
-		Piece capturedPiece = tempBoard[move.endRow][move.endCol].GetPiece();
-		tempBoard[move.endRow][move.endCol].SetPiece(movingPiece);
-		tempBoard[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-		// Find king position
-		int kingRow = -1, kingCol = -1;
-		for (int r = 0; r < 8; r++)
-		{
-			for (int c = 0; c < 8; c++)
-			{
-				Piece p = tempBoard[r][c].GetPiece();
-				if (p.GetType() == Pieces::KING && p.GetColor() == color)
-				{
-					kingRow = r; kingCol = c;
-					break;
-				}
-			}
-			if (kingRow != -1) break;
-		}
-		Color enemy = (color == Color::WHITE) ? Color::BLACK : Color::WHITE;
-		if (!IsSquareAttacked(kingRow, kingCol, enemy, tempBoard))
-			legalMoves.push_back(move);
-		// No need to undo the move since we used a copy of the board
-	}
-
-	return legalMoves;
+				// Remove moves that cause checks
+				engine->MakeMove(move);
+				bool inCheck = engine->InCheck(Opponent(GameState::currentPlayer));
+				engine->UndoMove();
+				return inCheck;
+			}),
+		moves.end()
+	);
 }
 
 std::vector<Move> BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const Square board[8][8], bool onlyNoisy)

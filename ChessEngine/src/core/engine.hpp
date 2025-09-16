@@ -21,7 +21,7 @@ public:
 	Engine();
 	Engine(std::string fen);
 	~Engine();
-
+	void Reset();
 	void LoadPosition(std::string fen);
 
 	void Update();
@@ -47,10 +47,10 @@ public:
 	inline const bool IsCheckmate(Color color) { return GameState::checkmate && InCheck(color); }
 
 	int PieceToIndex(const Piece& p) const;
+	bool ValidMove(const Piece piece, const Move move); // Checks if the move is valid for the piece
 private:
 	bool StoreMove(); // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move
-	bool ValidMove(const Piece piece, const Move move); // Checks if the move is valid for the piece
 
 	void UpdateEndgameStatus();
 	void UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece);
@@ -59,7 +59,6 @@ private:
 	bool HandleSpecialNotation(); // Returns if there was notation or not
 
 	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
-	
 
 	Square board[8][8];
 	GraphicsEngine graphics;

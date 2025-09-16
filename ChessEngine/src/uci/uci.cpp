@@ -4,13 +4,22 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <fstream>
+#include <random>
+#include <thread>
+#include <cstdlib>
+#include <ctime>
 
-Uci::Uci(Engine* engine, Bot* bot) : engine(engine), bot(bot) {}
+Uci::Uci(Engine* engine, Bot* bot) : engine(engine), bot(bot)
+{
+}
 
 void Uci::Loop()
 {
     std::string line;
     while (std::getline(std::cin, line)) {
+        //uciLog << "<<< " << line << std::endl; // log incoming
+        //uciLog.flush(); // make sure it writes immediately
         HandleCommand(line);
     }
 }
@@ -28,13 +37,43 @@ void Uci::HandleCommand(const std::string& line)
         std::cout << "uciok" << std::endl;
     }
     else if (token == "isready")
+    {
         std::cout << "readyok" << std::endl;
+    }
     else if (token == "position")
+    {
         HandlePosition(iss);
+    }
     else if (token == "go")
+    {
         HandleGo(iss);
+    }
+    else if (token == "ucinewgame")
+    {
+        // Should probably clean this up
+        delete engine;
+        engine = new Engine();
+
+        GameState::currentPlayer = Color::WHITE;
+        GameState::checkStatus = 0;
+        GameState::enPassantTarget[0] = -1;
+        GameState::enPassantTarget[1] = -1;
+        GameState::halfmoves = 0;
+        GameState::endgameStatus = false;
+        GameState::checkmate = false;
+        GameState::draw = false;
+        GameState::invalidMove = false;
+        GameState::whiteCastlingRights[0] = true;
+        GameState::whiteCastlingRights[1] = true;
+        GameState::blackCastlingRights[0] = true;
+        GameState::blackCastlingRights[1] = true;
+
+        bot->Clear();
+    }
     else if (token == "quit")
+    {
         exit(0);
+    }
 }
 
 void Uci::HandlePosition(std::istringstream& iss)
@@ -66,9 +105,6 @@ void Uci::HandlePosition(std::istringstream& iss)
 
     if (token == "moves")
     {
-        // Reset board
-        engine->LoadPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-
         std::string moveString;
         while (line_ss >> moveString)
         {
@@ -97,6 +133,7 @@ void Uci::HandleGo(std::istringstream& iss)
     bot->SetColor(engine->GetCurrentPlayer());
     Move bestMove = bot->GetMoveUCI(wtime, btime);
     std::cout << "bestmove " << bestMove.ToUCIString() << std::endl;
+    std::cout.flush();
 }
 
 Move Uci::ParseMove(const std::string& moveString)

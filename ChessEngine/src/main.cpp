@@ -2,12 +2,11 @@
 #include "bot/bot.hpp"
 #include "uci/uci.hpp"
 #include "bot/opening.hpp"
-#include <iostream>
 
 // TODO: Don't clear and refill queued renders every frame
 // TODO: Sometimes using uint8_t for moves has very weird memory bugs, like setting the move col to 204 in GetAllMoves
+// TODO: Logging
 // 
-// TODO: Opening book
 // TODO: Move extension: If opponent in check/move is promotion extend search 1 further
 // TODO: Tablebase
 // TODO: Optimization with bitboards
@@ -16,38 +15,35 @@
 
 int main()
 {
-    // Load opening book
-
-    const char* fen = "r1bqkb1r/ppp2ppp/2n2n2/3Pp1N1/2B5/8/PPPP1PPP/RNBQK2R w KQkq - 0 5";
+    const char* fen = "4k2r/6r1/8/8/8/8/3R4/R3K3 w Qk - 0 1";
+    const char* fen2 = "3k3r/6r1/8/8/8/8/8/R3K3 w Q - 0 2";
+    const char* fen3 = "3k3r/6r1/8/8/8/8/8/R3K3 w Q - 0 1";
+    const char* fen4 = "3k3r/6r1/8/8/8/8/8/2KR4 b - - 0 1";
+    const char* fen5 = "8/8/6p1/3k4/1P6/7P/3K4/8 w - - 0 1";
+    const char* mis = "r1bqkbnr/pp1ppppp/n1p5/8/P1P5/8/1P1PPPPP/RNBQKBNR w KQkq - 0 3";
+    const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const char* pawn = "pppppppp/8/8/8/8/8/8/PPPPPPPP w KQkq - 0 1";
     bool uci = false; // Used for bot v. bot iteration testing
-    Engine chessEngine;
-	Bot whiteBot(&chessEngine, Color::WHITE);
-	Bot blackBot(&chessEngine, Color::BLACK);
-    uint64_t startKey = chessEngine.GetZobristKey();
-    //std::cout << "Startpos hash: " << std::hex << startKey << std::endl;
-    //std::cout << "Expected hash: 0xf8d626aaaf278509" << std::endl;
-
-    //chessEngine.LoadPosition(fen);
-    //uint64_t fenKey = chessEngine.ComputeFullHash();
-    //std::cout << "FEN hash: " << std::hex << fenKey << std::endl;
-
-    LoadPolyglot("res/komodo.bin");
+    Engine* chessEngine = new Engine;
+	Bot whiteBot(chessEngine, Color::WHITE);
+	Bot blackBot(chessEngine, Color::BLACK);
 
     if (uci)
     {
-        Uci uci(&chessEngine, &whiteBot);
+        Uci uci(chessEngine, &whiteBot);
         uci.Loop();
     }
     else
     {
-        chessEngine.SetBot(&whiteBot);
-        chessEngine.SetBot(&blackBot);
+        chessEngine->SetBot(&whiteBot);
+        //chessEngine.SetBot(&blackBot);
         while (1)
         {
-            chessEngine.Update();
+            chessEngine->Update();
         }
     }
+
+    delete chessEngine;
 
 	return 0;
 }

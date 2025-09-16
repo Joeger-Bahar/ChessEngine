@@ -44,7 +44,7 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
-    <EnableASAN>true</EnableASAN>
+    <EnableASAN>false</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -52,7 +52,7 @@
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
-    <EnableASAN>true</EnableASAN>
+    <EnableASAN>false</EnableASAN>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -166,7 +166,46 @@
     <ClInclude Include="src\core\move.hpp" />
     <ClInclude Include="src\core\piece.hpp" />
     <ClInclude Include="src\core\square.hpp" />
+    <ClInclude Include="src\stockfish-src\src\benchmark.h" />
+    <ClInclude Include="src\stockfish-src\src\bitboard.h" />
+    <ClInclude Include="src\stockfish-src\src\engine.h" />
+    <ClInclude Include="src\stockfish-src\src\evaluate.h" />
+    <ClInclude Include="src\stockfish-src\src\history.h" />
+    <ClInclude Include="src\stockfish-src\src\incbin\incbin.h" />
+    <ClInclude Include="src\stockfish-src\src\memory.h" />
+    <ClInclude Include="src\stockfish-src\src\misc.h" />
+    <ClInclude Include="src\stockfish-src\src\movegen.h" />
+    <ClInclude Include="src\stockfish-src\src\movepick.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\features\half_ka_v2_hm.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\layers\affine_transform.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\layers\affine_transform_sparse_input.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\layers\clipped_relu.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\layers\simd.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\layers\sqr_clipped_relu.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\network.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\nnue_accumulator.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\nnue_architecture.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\nnue_common.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\nnue_feature_transformer.h" />
+    <ClInclude Include="src\stockfish-src\src\nnue\nnue_misc.h" />
+    <ClInclude Include="src\stockfish-src\src\numa.h" />
+    <ClInclude Include="src\stockfish-src\src\perft.h" />
+    <ClInclude Include="src\stockfish-src\src\position.h" />
+    <ClInclude Include="src\stockfish-src\src\score.h" />
+    <ClInclude Include="src\stockfish-src\src\search.h" />
+    <ClInclude Include="src\stockfish-src\src\syzygy\tbprobe.h" />
+    <ClInclude Include="src\stockfish-src\src\thread.h" />
+    <ClInclude Include="src\stockfish-src\src\thread_win32_osx.h" />
+    <ClInclude Include="src\stockfish-src\src\timeman.h" />
+    <ClInclude Include="src\stockfish-src\src\tt.h" />
+    <ClInclude Include="src\stockfish-src\src\tune.h" />
+    <ClInclude Include="src\stockfish-src\src\types.h" />
+    <ClInclude Include="src\stockfish-src\src\uci.h" />
+    <ClInclude Include="src\stockfish-src\src\ucioption.h" />
     <ClInclude Include="src\uci\uci.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="src\test.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -15,8 +15,8 @@ struct BookMove
     uint16_t weight; // frequency
 };
 
-extern std::unordered_map<uint64_t, std::vector<BookMove>> book;
+//extern std::unordered_map<uint64_t, std::vector<BookMove>> book;
 
-void LoadPolyglot(const std::string& filename);
-Move GetBookMove(Engine* engine);
-Move PolyglotToMove(uint16_t pmove);
+//void LoadPolyglot(const std::string& filename);
+Move GetBookMove(Engine* engine, const std::string& filename);// , double randomness = 1.0);
+Move PolyglotToMove(uint16_t pmove, Engine* engine);

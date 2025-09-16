@@ -21,6 +21,8 @@ public:
 	void SetColor(Color color);
 	const Color GetColor() const { return botColor; }
 
+	void Clear();
+
 private:
 	int Search(int depth, Color maximizingColor, int alpha, int beta);
 	int Qsearch(int alpha, int beta, Color maximizingPlayer);
@@ -34,7 +36,7 @@ private:
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;
-	int timePerTurn = 500; // In milliseconds
+	int timePerTurn = 1; // In milliseconds
 	bool quitEarly = false;
 	bool uci = false;
 };

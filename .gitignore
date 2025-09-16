@@ -364,3 +364,4 @@ MigrationBackup/
 FodyWeavers.xsd
 /ChessEngine/res/openings.bin
 /ChessEngine/res/komodo.bin
+/ChessEngine/src/stockfish

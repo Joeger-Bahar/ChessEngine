@@ -1,5 +1,8 @@
 #include "move.hpp"
 
+#include <iostream>
+
+
 Move::Move(int startCol, int startRow, int endCol, int endRow, int promotion, bool wasEnPassant, bool wasCastle)
 	: startCol(startCol), startRow(startRow), endCol(endCol), endRow(endRow), promotion(promotion),
 	wasEnPassant(wasEnPassant), wasCastle(wasCastle)
@@ -7,14 +10,7 @@ Move::Move(int startCol, int startRow, int endCol, int endRow, int promotion, bo
 
 const char* Move::ToString() const
 {
-	static char buffer[6]; // Max length for move notation (e.g., e2e4) + null terminator
-	if (wasCastle)
-	{
-		if (endCol == 6) // Kingside
-			return "O-O";
-		else // Queenside
-			return "O-O-O";
-	}
+	static char buffer[6]; // Max length for move notation (e.g., e2e4q) + null terminator
 	buffer[0] = 'a' + startCol; // Column a-h
 	buffer[1] = '8' - startRow; // Row 1-8
 	buffer[2] = 'a' + endCol;   // Column a-h
@@ -88,4 +84,40 @@ bool Move::IsNull() const
 	return startCol == 0 && startRow == 0 &&
 		endCol == 0 && endRow == 0 &&
 		!wasEnPassant && !wasCastle;
+}
+
+Move Move::FromUCI(const std::string& uci, const Square board[8][8])
+{
+	if (uci.size() < 4)
+		throw "Invalid UCI move: " + uci;
+
+	Move m;
+
+	// Convert file/rank into col/row
+	m.startCol = uci[0] - 'a';
+	m.startRow = '8' - uci[1];
+	m.endCol = uci[2] - 'a';
+	m.endRow = '8' - uci[3];
+
+	m.promotion = (int)Pieces::NONE; // or however you store it
+	if (uci.size() == 5) {
+		char promoChar = uci[4];
+		switch (promoChar) {
+		case 'q': m.promotion = (int)Pieces::QUEEN; break;
+		case 'r': m.promotion = (int)Pieces::ROOK;  break;
+		case 'b': m.promotion = (int)Pieces::BISHOP; break;
+		case 'n': m.promotion = (int)Pieces::KNIGHT; break;
+		default: break; // Invalid char, ignore
+		}
+	}
+
+	if (board[m.startRow][m.startCol].GetPiece().GetType() == Pieces::KING)
+	{
+		if (std::abs(m.startCol - m.endCol) > 1) // King moved more than 1 space
+		{
+			m.wasCastle = true;
+		}
+	}
+
+	return m;
 }

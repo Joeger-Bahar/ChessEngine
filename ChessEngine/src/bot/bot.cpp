@@ -94,6 +94,19 @@ void Bot::SetColor(Color color)
 	this->botColor = color;
 }
 
+void Bot::Clear()
+{
+	for (int i = 0; i < 32; ++i)
+		moveLists[i].clear();
+
+	nodesSearched = 0;
+	timePerTurn = 500; // In milliseconds
+	quitEarly = false;
+	uci = false;
+
+	tt.Clear();
+}
+
 Move Bot::GetMoveUCI(int wtime, int btime)
 {
 	uci = true;
@@ -104,15 +117,16 @@ Move Bot::GetMoveUCI(int wtime, int btime)
 		time_for_move = btime / 20;
 	}
 	timePerTurn = 500;
-	return GetMove();
+	Move move = GetMove();
+	return move;
 }
 
 Move Bot::GetMove()
 {
-	Move bookMove = GetBookMove(engine);
+	Move bookMove = GetBookMove(engine, "res/openings.bin");
 	if (!bookMove.IsNull())
 	{
-		//std::cout << "Using opening move\n";
+		std::cout << "Using opening move\n";
 		return bookMove; // Play instantly
 	}
 
@@ -122,10 +136,13 @@ Move Bot::GetMove()
 
 	int maxDepth = 8;
 	Move bestMove = Move();
-	int bestScore = 0;
+	int bestScore;
+	if (botColor == Color::WHITE) bestScore = std::numeric_limits<int>::min();
+	else						  bestScore = std::numeric_limits<int>::max();
 
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
+		std::cout << "depth: " << depth << std::endl;
 		int alpha = std::numeric_limits<int>::min();
 		int beta = std::numeric_limits<int>::max();
 		bool foundLegal = false;
@@ -137,15 +154,20 @@ Move Bot::GetMove()
 		if (!bestMove.IsNull()) // Current best move first to help with pruning
 			OrderMoves(moves, bestMove);
 		else
+		{
 			OrderMoves(moves);
+			bestMove = moves[0]; // If not enough time to find move, set default after sorting
+		}
 
 		bool isWhite = botColor == Color::WHITE;
 
 		if (isWhite) currentBestScore = std::numeric_limits<int>::min();
 		else         currentBestScore = std::numeric_limits<int>::max();
 
-		for (Move move : moves)
+		for (const Move& move : moves)
 		{
+			Piece movingPiece = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
+
 			engine->MakeMove(move);
 
 			if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
@@ -154,9 +176,13 @@ Move Bot::GetMove()
 
 			int score = Search(depth - 1, Color::WHITE, alpha, beta);
 			engine->UndoMove();
+			if (!engine->ValidMove(movingPiece, move)) std::cout << "Invalid moveeeeeeeeeeeeeeeeeeeeeeeeeeee\n";
+
 
 			if (quitEarly)
+			{
 				break;
+			}
 
 			auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
 			if (elapsed >= timePerTurn)
@@ -169,6 +195,7 @@ Move Bot::GetMove()
 			{
 				if (score > currentBestScore)
 				{
+					//std::cout << "Assigning best move (greater) " << move.ToString() << " with score " << score << '\n';
 					currentBestScore = score;
 					currentBestMove = move;
 				}
@@ -177,6 +204,7 @@ Move Bot::GetMove()
 			{
 				if (score < currentBestScore)
 				{
+					//std::cout << "Assigning best move (less than) " << move.ToString() << " with score " << score << '\n';
 					currentBestScore = score;
 					currentBestMove = move;
 				}
@@ -215,7 +243,9 @@ Move Bot::GetMove()
 		}
 
 		if (quitEarly)
+		{
 			break;
+		}
 
 		// Extradite mate
 		// Cast to avoid integer overflow
@@ -231,18 +261,29 @@ Move Bot::GetMove()
 		}
 		// Stop searching if time limit is reached
 		if (elapsed >= timePerTurn)
+		{
 			break;
+		}
 	}
 
 	nodesSearched = 0;
-	return bestMove;
+
+	std::cout << "Making " << bestMove.ToString() << " with score " << bestScore << '\n';
+
+	Piece movingPiece = engine->GetBoard()[bestMove.startRow][bestMove.startCol].GetPiece();
+	if (!engine->ValidMove(movingPiece, bestMove)) throw "Invalid move";
+
+	if (!bestMove.IsNull())
+		return bestMove;
+	else
+		throw "Move was null\n";
 }
 
 int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 {
 	nodesSearched++;
 	// Check time every 1028 nodes (& faster than %)
-	if ((nodesSearched & 0x1028) == 0)
+	if ((nodesSearched & 0x1027) == 0)
 	{
 		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
 		if (elapsed >= timePerTurn)
@@ -296,7 +337,7 @@ int Bot::Search(int depth, Color maximizingColor, int alpha, int beta)
 	else			bestEval = std::numeric_limits<int>::max();
 
 	// Loop through moves
-	for (Move move : moves)
+	for (const Move& move : moves)
 	{
 		engine->MakeMove(move);
 
@@ -381,7 +422,7 @@ int Bot::Qsearch(int alpha, int beta, Color maximizingPlayer)
 	bool onlyNoisy = true;
 	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard(), onlyNoisy);
 
-	for (Move move : moves)
+	for (const Move& move : moves)
 	{
 		engine->MakeMove(move);
 		if (engine->InCheck(maximizingPlayer)) // Skip illegal moves
