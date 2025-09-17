@@ -20,30 +20,30 @@ int main()
     const char* fen3 = "3k3r/6r1/8/8/8/8/8/R3K3 w Q - 0 1";
     const char* fen4 = "3k3r/6r1/8/8/8/8/8/2KR4 b - - 0 1";
     const char* fen5 = "8/8/6p1/3k4/1P6/7P/3K4/8 w - - 0 1";
-    const char* mis = "r1bqkbnr/pp1ppppp/n1p5/8/P1P5/8/1P1PPPPP/RNBQKBNR w KQkq - 0 3";
+    const char* mis = "6K1/2RP4/1B6/pp2r1Rp/1kp2Np1/1p1PN3/8/8 w - - 0 1";
     const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const char* pawn = "pppppppp/8/8/8/8/8/8/PPPPPPPP w KQkq - 0 1";
     bool uci = false; // Used for bot v. bot iteration testing
-    Engine* chessEngine = new Engine;
-	Bot whiteBot(chessEngine, Color::WHITE);
-	Bot blackBot(chessEngine, Color::BLACK);
+    Engine* chessEngine = new Engine(mis);
+	Bot* whiteBot = new Bot(chessEngine, Color::WHITE);
+	Bot* blackBot = new Bot(chessEngine, Color::BLACK);
 
     if (uci)
     {
-        Uci uci(chessEngine, &whiteBot);
-        uci.Loop();
+        //Uci uci(chessEngine, whiteBot);
+        //uci.Loop();
     }
     else
     {
-        chessEngine->SetBot(&whiteBot);
-        //chessEngine.SetBot(&blackBot);
-        while (1)
-        {
-            chessEngine->Update();
-        }
+        chessEngine->SetBot(whiteBot);
+        chessEngine->SetBot(blackBot);
+
+        while (1) chessEngine->Update();
     }
 
     delete chessEngine;
+    delete whiteBot;
+    delete blackBot;
 
 	return 0;
 }

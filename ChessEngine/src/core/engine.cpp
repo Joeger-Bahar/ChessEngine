@@ -93,6 +93,7 @@ void Engine::Update()
 		{
 			move = bot->GetMove();
 			std::cout << move.ToString() << "\n";
+			StoreMove(); // Update window and shit
 			break;
 		}
 

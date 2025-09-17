@@ -12,6 +12,9 @@
 #include "core/eval.hpp"
 #include "graphics/graphicsEngine.hpp"
 
+#define MAX_PLY 128
+#define NUM_PIECES 6
+
 class Bot
 {
 public:
@@ -24,19 +27,22 @@ public:
 	void Clear();
 
 private:
-	int Search(int depth, Color maximizingColor, int alpha, int beta);
+	int Search(int depth, int ply, Color maximizingColor, int alpha, int beta);
 	int Qsearch(int alpha, int beta, Color maximizingPlayer);
-	int ScoreMove(const Move move);
-	void OrderMoves(std::vector<Move>& moves, Move firstMove = Move());
+	int ScoreMove(const Move move, int ply);
+	void OrderMoves(std::vector<Move>& moves, int ply, Move firstMove = Move());
 
 	TranspositionTable tt;
+	// [color][pieces][start square][end square]
+	int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
 	Engine* engine;
 	Color botColor;
-	std::vector<Move> moveLists[32];
+	std::vector<Move> moveLists[MAX_PLY];
+	Move killerMoves[MAX_PLY][2];
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;
-	int timePerTurn = 1; // In milliseconds
+	int timePerTurn = 6000; // In milliseconds
 	bool quitEarly = false;
 	bool uci = false;
 };

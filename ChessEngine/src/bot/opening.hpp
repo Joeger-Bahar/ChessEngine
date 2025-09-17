@@ -11,8 +11,8 @@
 
 struct BookMove
 {
-    uint16_t move;   // polyglot encoded
-    uint16_t weight; // frequency
+    uint16_t move;   // Polyglot encoded
+    uint16_t weight; // Frequency
 };
 
 //extern std::unordered_map<uint64_t, std::vector<BookMove>> book;

@@ -333,7 +333,7 @@ void BoardCalculator::CompareMoveLists(const std::vector<Move>& myMoves,
 std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square board[8][8], Engine* engine)
 {
 	std::vector<Move> moves;
-	GetAllMoves(moves, color, board);
+	GetAllMoves(moves, color, board, engine);
 	moves.erase(
 		std::remove_if(moves.begin(), moves.end(),
 			[&](Move move)
@@ -346,9 +346,12 @@ std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square bo
 			}),
 		moves.end()
 	);
+
+	return moves;
 }
 
-std::vector<Move> BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const Square board[8][8], bool onlyNoisy)
+void BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const Square board[8][8], Engine* engine,
+	bool onlyNoisy)
 {
 	moves.clear();
 	for (int i = 0; i < 8; ++i)
@@ -420,7 +423,7 @@ std::vector<Move> BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color c
 			{
 				if (pieceMoves[idx])
 				{
-					Move move{};
+					Move move;
 					move.startRow = i;
 					move.startCol = j;
 					move.endRow = idx / 8;
@@ -430,42 +433,27 @@ std::vector<Move> BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color c
 					const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
 
 					// Castle
-					if (movingPiece.GetType() == Pieces::KING)
-					{
-						if (abs(move.startCol - move.endCol) == 2)
-						{
-							move.wasCastle = true;
-						}
-					}
+					if (movingPiece.GetType() == Pieces::KING && abs(move.startCol - move.endCol) == 2)
+						move.wasCastle = true;
+
 					// En passant
-					if (movingPiece.GetType() == Pieces::PAWN && move.startCol != move.endCol
-						&& targetPiece.GetType() == Pieces::NONE)
-					{
+					if (movingPiece.GetType() == Pieces::PAWN && move.startCol != move.endCol &&
+						targetPiece.GetType() == Pieces::NONE)
 						move.wasEnPassant = true;
-					}
 
 					// Capture
 					if (onlyNoisy)
 					{
 						// Capture
-						if (targetPiece.GetType() != Pieces::NONE || move.wasEnPassant)
-						{
-							moves.push_back(move);
-						}
-						// Promotion
-						if (movingPiece.GetType() == Pieces::PAWN)
-						{
-							if (color == Color::WHITE)
-							{
-								if (move.startRow == 1)
-									moves.push_back(move);
-							}
-							else
-							{
-								if (move.startRow == 6)
-									moves.push_back(move);
-							}
-						}
+						if (move.IsCapture(board)) moves.push_back(move);
+
+						// Promotions are added earlier
+
+						// Checks
+						engine->MakeMove(move);
+						// Make move switches player so this is opponent
+						if (engine->InCheck(GameState::currentPlayer)) moves.push_back(move);
+						engine->UndoMove();
 					}
 					else
 						moves.push_back(move);
@@ -473,14 +461,12 @@ std::vector<Move> BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color c
 			}
 		}
 	}
-
-	return moves;
 }
 
-std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8], bool onlyCaptures)
+std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8], Engine* engine, bool onlyCaptures)
 {
 	std::vector<Move> moves;
-	GetAllMoves(moves, color, board, onlyCaptures);
+	GetAllMoves(moves, color, board, engine, onlyCaptures);
 	return moves;
 }
 

@@ -19,6 +19,7 @@ struct Move
     const char* ToUCIString() const;
     static Move FromUCI(const std::string& uci, const Square board[8][8]);
 	bool IsNull() const;
+    bool IsCapture(const Square board[8][8]) const;
     bool operator==(const Move& other) const
     {
         return startCol == other.startCol &&

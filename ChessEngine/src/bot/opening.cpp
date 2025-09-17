@@ -188,11 +188,8 @@ Move PolyglotToMove(uint16_t pmove, Engine* engine)
     // Detect castling (engine rows: white = row 7, black = row 0)
     if (engine->GetBoard()[fromRow][fromCol].GetPiece().GetType() == Pieces::KING)
     {
-        std::cout << "Running castling check\n";
-        std::cout << fromCol << " " << toCol << "\n";
         if (std::abs(fromCol - toCol) > 1) // King moved more than 1 space
         {
-            std::cout << "Set castling to true\n";
             wasCastle = true;
             // Convert polyglot into engine expected movement for castling
             if (toCol == 7) toCol = 6;

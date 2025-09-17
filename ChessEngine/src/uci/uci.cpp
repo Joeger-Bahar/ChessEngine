@@ -51,9 +51,6 @@ void Uci::HandleCommand(const std::string& line)
     else if (token == "ucinewgame")
     {
         // Should probably clean this up
-        delete engine;
-        engine = new Engine();
-
         GameState::currentPlayer = Color::WHITE;
         GameState::checkStatus = 0;
         GameState::enPassantTarget[0] = -1;
@@ -68,7 +65,11 @@ void Uci::HandleCommand(const std::string& line)
         GameState::blackCastlingRights[0] = true;
         GameState::blackCastlingRights[1] = true;
 
-        bot->Clear();
+        delete engine;
+        engine = new Engine();
+
+        delete bot;
+        bot = new Bot(engine, Color::WHITE);
     }
     else if (token == "quit")
     {

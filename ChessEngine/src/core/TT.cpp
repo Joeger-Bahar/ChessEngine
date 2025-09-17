@@ -23,8 +23,8 @@ TranspositionTable::TranspositionTable(int megabytes)
         entries = p2;
     }
     table.resize(entries);
-    // zero init
-    for (auto& e : table) e.key = 0;
+    
+    Clear();
 }
 
 bool TranspositionTable::ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove)

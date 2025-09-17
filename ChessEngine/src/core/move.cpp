@@ -86,6 +86,17 @@ bool Move::IsNull() const
 		!wasEnPassant && !wasCastle;
 }
 
+bool Move::IsCapture(const Square board[8][8]) const
+{
+	bool isCapture = false;
+	if (board[endRow][endCol].GetPiece().GetType() != Pieces::NONE) isCapture = true;
+	if (wasEnPassant) isCapture = true;
+	if (promotion == 6) isCapture = false;
+	if (wasCastle) isCapture = false;
+
+	return isCapture;
+}
+
 Move Move::FromUCI(const std::string& uci, const Square board[8][8])
 {
 	if (uci.size() < 4)
