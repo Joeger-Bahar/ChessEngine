@@ -24,26 +24,26 @@ int main()
     const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const char* pawn = "pppppppp/8/8/8/8/8/8/PPPPPPPP w KQkq - 0 1";
     bool uci = false; // Used for bot v. bot iteration testing
-    Engine* chessEngine = new Engine(mis);
+    Engine* chessEngine = new Engine;
 	Bot* whiteBot = new Bot(chessEngine, Color::WHITE);
-	Bot* blackBot = new Bot(chessEngine, Color::BLACK);
+	//Bot* blackBot = new Bot(chessEngine, Color::BLACK);
 
     if (uci)
     {
-        //Uci uci(chessEngine, whiteBot);
-        //uci.Loop();
+        Uci uci(chessEngine, whiteBot);
+        uci.Loop();
     }
     else
     {
         chessEngine->SetBot(whiteBot);
-        chessEngine->SetBot(blackBot);
+        //chessEngine->SetBot(blackBot);
 
         while (1) chessEngine->Update();
     }
 
     delete chessEngine;
     delete whiteBot;
-    delete blackBot;
+    //delete blackBot;
 
 	return 0;
 }

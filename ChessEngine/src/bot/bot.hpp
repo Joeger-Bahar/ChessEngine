@@ -34,15 +34,15 @@ private:
 
 	TranspositionTable tt;
 	// [color][pieces][start square][end square]
-	int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
+	//int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
 	Engine* engine;
 	Color botColor;
 	std::vector<Move> moveLists[MAX_PLY];
-	Move killerMoves[MAX_PLY][2];
+	//Move killerMoves[MAX_PLY][2];
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;
-	int timePerTurn = 6000; // In milliseconds
+	int timePerTurn = 500; // In milliseconds
 	bool quitEarly = false;
 	bool uci = false;
 };
