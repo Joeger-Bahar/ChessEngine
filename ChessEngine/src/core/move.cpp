@@ -110,10 +110,12 @@ Move Move::FromUCI(const std::string& uci, const Square board[8][8])
 	m.endCol = uci[2] - 'a';
 	m.endRow = '8' - uci[3];
 
-	m.promotion = (int)Pieces::NONE; // or however you store it
-	if (uci.size() == 5) {
+	m.promotion = static_cast<int>(Pieces::NONE); // or however you store it
+	if (uci.size() == 5)
+	{
 		char promoChar = uci[4];
-		switch (promoChar) {
+		switch (promoChar)
+		{
 		case 'q': m.promotion = (int)Pieces::QUEEN; break;
 		case 'r': m.promotion = (int)Pieces::ROOK;  break;
 		case 'b': m.promotion = (int)Pieces::BISHOP; break;
@@ -122,13 +124,9 @@ Move Move::FromUCI(const std::string& uci, const Square board[8][8])
 		}
 	}
 
-	if (board[m.startRow][m.startCol].GetPiece().GetType() == Pieces::KING)
-	{
-		if (std::abs(m.startCol - m.endCol) > 1) // King moved more than 1 space
-		{
-			m.wasCastle = true;
-		}
-	}
+	// King moved more than 1 space
+	if (board[m.startRow][m.startCol].GetPiece().GetType() == Pieces::KING && std::abs(m.startCol - m.endCol) > 1) 
+		m.wasCastle = true;
 
 	return m;
 }

@@ -1,4 +1,5 @@
 #include "piece.hpp"
+#include "boardCalculator.hpp"
 
 Piece::Piece(Pieces t, Color c)
 	: type(t), color(c)
@@ -18,12 +19,12 @@ const char* Piece::ToString() const
 {
 	switch (type)
 	{
-	case Pieces::KING:   return (color == Color::WHITE) ? "K" : "k";
-	case Pieces::QUEEN:  return (color == Color::WHITE) ? "Q" : "q";
-	case Pieces::ROOK:   return (color == Color::WHITE) ? "R" : "r";
-	case Pieces::BISHOP: return (color == Color::WHITE) ? "B" : "b";
-	case Pieces::KNIGHT: return (color == Color::WHITE) ? "N" : "n";
-	case Pieces::PAWN:   return (color == Color::WHITE) ? "P" : "p";
+	case Pieces::KING:   return IsWhite(color) ? "K" : "k";
+	case Pieces::QUEEN:  return IsWhite(color) ? "Q" : "q";
+	case Pieces::ROOK:   return IsWhite(color) ? "R" : "r";
+	case Pieces::BISHOP: return IsWhite(color) ? "B" : "b";
+	case Pieces::KNIGHT: return IsWhite(color) ? "N" : "n";
+	case Pieces::PAWN:   return IsWhite(color) ? "P" : "p";
 	default:             return ".";
 	}
 }

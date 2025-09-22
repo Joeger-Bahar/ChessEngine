@@ -75,7 +75,6 @@ void Engine::Reset()
 	// Note: don't delete `bots[]` since they are set externally
 }
 
-
 void Engine::Update()
 {
 	Move move;
@@ -86,13 +85,13 @@ void Engine::Update()
 		if (IsOver())
 			return; // Game is finished
 
-		int index = (currentPlayer == Color::WHITE) ? 0 : 1;
+		int index = IsWhite(currentPlayer) ? 0 : 1;
 		Bot* bot = bots[index];
 
 		if (botPlaying[index] && bot != nullptr)
 		{
 			move = bot->GetMove();
-			std::cout << move.ToString() << "\n";
+			//std::cout << move.ToString() << "\n";
 			StoreMove(); // Update window and shit
 			break;
 		}
@@ -117,8 +116,8 @@ void Engine::Update()
 	CheckKingInCheck();
 	UpdateEndgameStatus();
 	std::cout << move.ToUCIString() << '\n';
-	//Render();
-	//Sleep(2000);
+	Render();
+	Sleep(2000);
 
 	// Update game state after move
 	CheckCheckmate();
@@ -176,7 +175,7 @@ void Engine::UpdateEndgameStatus()
 			Piece piece = board[r][c].GetPiece();
 			if (piece.GetType() == Pieces::NONE) continue;
 
-			if (piece.GetColor() == Color::WHITE)
+			if (IsWhite(piece.GetColor()))
 			{
 				switch (piece.GetType())
 				{
@@ -273,14 +272,14 @@ uint64_t Engine::ComputeFullHash() const
 		}
 	}
 
-	// side to move
-	if (currentPlayer == Color::WHITE)
+	// Side to move
+	if (IsWhite(currentPlayer))
 	{
 		//std::cout << "Adding side to move\n";
 		h ^= zobrist.sideToMove;
 	}
 
-	// castling rights (Polyglot order: WK, WQ, BK, BQ)
+	// Castling rights (Polyglot order: WK, WQ, BK, BQ)
 	if (whiteCastlingRights[1])
 	{
 		//std::cout << "Hasing WK\n";
@@ -340,6 +339,7 @@ bool Engine::StoreMove()
 			board[click.first][click.second].GetPiece().GetColor() != currentPlayer)
 		{
 			std::cout << "Invalid first click\n";
+			if (board[click.first][click.second].IsEmpty()) std::cout << "Empty\n";
 			return false; // Invalid first click, wait for another
 		}
 
@@ -362,6 +362,7 @@ bool Engine::StoreMove()
 			firstClick = click;
 			return false; // Wait for second click
 		}
+		//else if (board[click.first][click.second].IsEmpty()) std::cout << "empty\n";
 
 		// Convert to notation
 		// If move is invalid it gets caught and handled in ProcessMove
@@ -412,7 +413,7 @@ void Engine::ProcessMove(Move& move)
 			return;
 		}
 		// Set start square to king and end square to 2 away
-		move.startRow = (currentPlayer == Color::WHITE) ? 7 : 0;
+		move.startRow = IsWhite(currentPlayer) ? 7 : 0;
 		move.startCol = 4;
 		move.endRow = move.startRow;
 		move.endCol = (notationMove == "O-O") ? 6 : 2;
@@ -456,76 +457,62 @@ void Engine::ProcessMove(Move& move)
 
 void Engine::MakeMove(const Move move)
 {
-	// --- snapshot old state (before any modification) ---
-	int oldEP_row = enPassantTarget[0];
-	int oldEP_col = enPassantTarget[1];
-	bool oldWhiteCastle0 = whiteCastlingRights[0];
-	bool oldWhiteCastle1 = whiteCastlingRights[1];
-	bool oldBlackCastle0 = blackCastlingRights[0];
-	bool oldBlackCastle1 = blackCastlingRights[1];
-	Color oldPlayer = currentPlayer;
-
 	const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
 	const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
 	int fromSq = move.startRow * 8 + move.startCol;
 	int toSq = move.endRow * 8 + move.endCol;
 
-	// Save state for undo (snapshot zobrist key too)
+	// Save state for undo
 	BoardState state;
-	state.movedPiece = static_cast<uint8_t>(movingPiece.GetType());
+	state.movedPiece	= static_cast<uint8_t>(movingPiece.GetType());
 	state.capturedPiece = static_cast<uint8_t>(targetPiece.GetType());
-	AppendUndoList(state, move); // make sure AppendUndoList stores zobristKey in the state
+	AppendUndoList(state, move);
 
-	// --- XOR OUT old ephemeral things (use the snapshots) ---
-	if (oldEP_row != -1) {
-		int oldEP_file = oldEP_col;
-		zobristKey ^= zobrist.enPassantFile[oldEP_file];
-	}
+	// XOR OUT old state
+	if (enPassantTarget[0] != -1)
+		zobristKey ^= zobrist.enPassantFile[enPassantTarget[1]];
 
-	if (oldWhiteCastle1) zobristKey ^= zobrist.castling[0];
-	if (oldWhiteCastle0) zobristKey ^= zobrist.castling[1];
-	if (oldBlackCastle1) zobristKey ^= zobrist.castling[2];
-	if (oldBlackCastle0) zobristKey ^= zobrist.castling[3];
+	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
+	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
+	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
+	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
 
 	// XOR out moving piece from its FROM square (old board)
 	zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][fromSq];
-
-	// If a normal capture (not en-passant), XOR out captured piece at destination (old board)
-	if (targetPiece.GetType() != Pieces::NONE) {
+	if (targetPiece.GetType() != Pieces::NONE)
 		zobristKey ^= zobrist.piece[PieceToIndex(targetPiece)][toSq];
-	}
-	// If en-passant *capture*, the captured pawn is not on the 'to' square; it's behind it.
-	if (move.wasEnPassant) {
-		int capRow = (oldPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
-		int capSq = capRow * 8 + move.endCol;
-		Piece capturedPawn(Pieces::PAWN, (oldPlayer == Color::WHITE ? Color::BLACK : Color::WHITE));
+
+	// Correct en passant capture square
+	if (move.wasEnPassant)
+	{
+		const int capRow = (IsWhite(currentPlayer)) ? move.endRow + 1 : move.endRow - 1;
+		const int capSq = capRow * 8 + move.endCol;
+		Piece capturedPawn(Pieces::PAWN, Opponent(currentPlayer));
 		zobristKey ^= zobrist.piece[PieceToIndex(capturedPawn)][capSq];
 	}
 
-	// --- Now apply the physical move to board & state (exactly like your existing code) ---
 	// 1. Move piece on board
 	board[move.endRow][move.endCol].SetPiece(movingPiece);
 	board[move.startRow][move.startCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 
-	// update king pos if needed (you already have this)
-	if (movingPiece.GetType() == Pieces::KING) {
-		if (oldPlayer == Color::WHITE) whiteKingPos = { move.endRow, move.endCol };
-		else blackKingPos = { move.endRow, move.endCol };
-	}
+	// Update king pos if needed
+	if (movingPiece.GetType() == Pieces::KING)
+		(IsWhite(currentPlayer) ? whiteKingPos : blackKingPos) = {move.endRow, move.endCol};
 
 	// 2. Update castling rights (this modifies whiteCastlingRights / blackCastlingRights)
 	UpdateCastlingRights(move, movingPiece, targetPiece);
 
 	// 3. Handle castling rook movement (if move.wasCastle)
-	if (move.wasCastle) {
+	if (move.wasCastle)
+	{
 		bool kingside = (move.endCol == 6);
-		int row = (oldPlayer == Color::WHITE) ? 7 : 0;
+		int row = (IsWhite(currentPlayer)) ? 7 : 0;
 		int rookStartCol = kingside ? 7 : 0;
-		int rookEndCol = kingside ? 5 : 3;
-		int rookFromSq = row * 8 + rookStartCol;
-		int rookToSq = row * 8 + rookEndCol;
+		int rookEndCol	 = kingside ? 5 : 3;
+		int rookFromSq	 = row * 8 + rookStartCol;
+		int rookToSq	 = row * 8 + rookEndCol;
 
-		Piece rook(Pieces::ROOK, oldPlayer);
+		Piece rook(Pieces::ROOK, currentPlayer);
 
 		// --- update zobrist for rook ---
 		zobristKey ^= zobrist.piece[PieceToIndex(rook)][rookFromSq]; // remove rook from start square
@@ -533,55 +520,51 @@ void Engine::MakeMove(const Move move)
 
 		board[row][rookEndCol].SetPiece(board[row][rookStartCol].GetPiece());
 		board[row][rookStartCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
-
-		if (oldPlayer == Color::WHITE) whiteKingPos = { row, move.endCol };
-		else blackKingPos = { row, move.endCol };
 	}
 
 	// 4. Update en-passant target (this will change enPassantTarget)
 	UpdateEnPassantSquare(move);
 
 	// 5. Handle en-passant capture on board
-	if (move.wasEnPassant) {
-		int pawnRow = (oldPlayer == Color::WHITE) ? move.endRow + 1 : move.endRow - 1;
+	if (move.wasEnPassant)
+	{
+		const int pawnRow = IsWhite(currentPlayer) ? move.endRow + 1 : move.endRow - 1;
 		board[pawnRow][move.endCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 	}
 
 	// 6. Handle promotion on board
-	if (move.promotion != 6) {
-		board[move.endRow][move.endCol].SetPiece(Piece((Pieces)move.promotion, oldPlayer));
-	}
+	if (move.promotion != static_cast<int>(Pieces::NONE))
+		board[move.endRow][move.endCol].SetPiece(Piece((Pieces)move.promotion, currentPlayer));
 
-	// 7. Update halfmove clock etc. (your existing logic)
+	// 7. Update halfmove clock etc.
 	if (movingPiece.GetType() == Pieces::PAWN || targetPiece.GetType() != Pieces::NONE)
 		halfmoves = 0;
-	else if (oldPlayer == Color::BLACK)
+	else if (currentPlayer == Color::BLACK)
 		halfmoves++;
-	if (halfmoves >= 50) { draw = true; /*...*/ }
+
+	if (halfmoves >= 50) { draw = true; }
 
 	// 8. Save moveHistory (you already do)
 	moveHistory.push_back(move);
 
-	// --- XOR IN new things (after board has new pos & flags) ---
-	// add piece at destination (promotion handled)
-	if (move.promotion != static_cast<int>(Pieces::NONE)) {
-		Piece promo((Pieces)move.promotion, oldPlayer);
+	// XOR IN new state
+	if (move.promotion != static_cast<int>(Pieces::NONE))
+	{
+		Piece promo((Pieces)move.promotion, currentPlayer);
 		zobristKey ^= zobrist.piece[PieceToIndex(promo)][toSq];
 	}
-	else {
+	else
 		zobristKey ^= zobrist.piece[PieceToIndex(movingPiece)][toSq];
-	}
 
-	// XOR in new castling rights (use the current whiteCastlingRights/blackCastlingRights)
+	// XOR in new castling rights
 	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
 	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
 	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
 	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
 
-	// XOR in new en-passant if present (enPassantTarget updated earlier)
-	if (enPassantTarget[0] != -1) {
+	// XOR in new en-passant if present
+	if (enPassantTarget[0] != -1)
 		zobristKey ^= zobrist.enPassantFile[enPassantTarget[1]];
-	}
 
 	// --- Finally, flip side-to-move in engine state and in the hash consistently ---
 	ChangePlayers(); // Flips currentPlayer
@@ -599,7 +582,7 @@ bool Engine::HandleSpecialNotation()
 	if (notationMove == "resign")
 	{
 		checkmate = true;
-		checkStatus = (currentPlayer == Color::WHITE) ? 0b01 : 0b10; // Opponent
+		checkStatus = IsWhite(currentPlayer) ? 0b01 : 0b10; // Opponent
 		return true;
 	}
 	else if (notationMove == "draw")
@@ -617,11 +600,22 @@ bool Engine::HandleSpecialNotation()
 	return false;
 }
 
+bool Engine::IsDraw() const
+{
+	if (draw) return true;
+	return (IsThreefold() || Is50Move());
+}
+
 bool Engine::IsThreefold() const
 {
 	if (positionStack.empty()) return false;
 	auto it = positionCounts.find(positionStack.back());
 	return (it != positionCounts.end() && it->second >= 3);
+}
+
+bool Engine::Is50Move() const
+{
+	return (halfmoves >= 50);
 }
 
 bool Engine::ValidMove(const Piece piece, const Move move)
@@ -646,43 +640,43 @@ std::string Engine::GetFEN() const
 		for (int j = 0; j < 8; ++j)
 		{
 			Piece piece = board[i][j].GetPiece();
-			if (piece.GetType() == Pieces::NONE)
+			if (piece.GetType() == Pieces::NONE) { emptyCount++; continue; }
+
+			if (emptyCount > 0)
 			{
-				emptyCount++;
+				fen += std::to_string(emptyCount);
+				emptyCount = 0;
 			}
-			else
+
+			char pieceChar;
+			switch (piece.GetType())
 			{
-				if (emptyCount > 0)
-				{
-					fen += std::to_string(emptyCount);
-					emptyCount = 0;
-				}
-				char pieceChar;
-				switch (piece.GetType())
-				{
-				case Pieces::KING:   pieceChar = 'k'; break;
-				case Pieces::QUEEN:  pieceChar = 'q'; break;
-				case Pieces::ROOK:   pieceChar = 'r'; break;
-				case Pieces::BISHOP: pieceChar = 'b'; break;
-				case Pieces::KNIGHT: pieceChar = 'n'; break;
-				case Pieces::PAWN:   pieceChar = 'p'; break;
-				default:             pieceChar = '?'; break; // Should not happen
-				}
-				if (piece.GetColor() == Color::WHITE)
-					pieceChar = toupper(pieceChar);
-				fen += pieceChar;
+			case Pieces::KING:   pieceChar = 'k'; break;
+			case Pieces::QUEEN:  pieceChar = 'q'; break;
+			case Pieces::ROOK:   pieceChar = 'r'; break;
+			case Pieces::BISHOP: pieceChar = 'b'; break;
+			case Pieces::KNIGHT: pieceChar = 'n'; break;
+			case Pieces::PAWN:   pieceChar = 'p'; break;
+			default:             pieceChar = '?'; break; // Should not happen
 			}
+
+			if (IsWhite(piece.GetColor()))
+				pieceChar = toupper(pieceChar);
+			fen += pieceChar;
 		}
+
 		if (emptyCount > 0)
 		{
 			fen += std::to_string(emptyCount);
 			emptyCount = 0;
 		}
+
 		if (i < 7)
 			fen += '/';
 	}
 
-	fen += (currentPlayer == Color::WHITE) ? " w " : " b ";
+	fen += IsWhite(currentPlayer) ? " w " : " b ";
+
 	// Castling rights
 	std::string castling;
 	if (whiteCastlingRights[1]) castling += 'K';
@@ -690,6 +684,7 @@ std::string Engine::GetFEN() const
 	if (blackCastlingRights[1]) castling += 'k';
 	if (blackCastlingRights[0]) castling += 'q';
 	fen += (castling.empty() ? "-" : castling);
+
 	// En passant target square
 	if (enPassantTarget[0] != -1 && enPassantTarget[1] != -1)
 	{
@@ -701,9 +696,8 @@ std::string Engine::GetFEN() const
 		fen += " ";
 	}
 	else
-	{
 		fen += " - ";
-	}
+
 	fen += std::to_string(halfmoves); // Halfmove clock
 	fen += " ";
 	fen += std::to_string(moveHistory.size() / 2 + 1); // Fullmove number
@@ -719,6 +713,10 @@ void Engine::LoadPosition(std::string fen)
 
 	fenStream >> placement >> activeColor >> castling >> enPassant >> halfmoveStr >> fullmoveStr;
 
+	for (int i = 0; i < 8; ++i)
+		for (int j = 0; j < 8; ++j)
+			board[i][j] = Square();
+
 	// 1. Piece placement
 	int row = 0, col = 0;
 	for (char c : placement)
@@ -730,16 +728,14 @@ void Engine::LoadPosition(std::string fen)
 		Pieces pieceType;
 		switch (tolower(c))
 		{
-		case 'p': pieceType = Pieces::PAWN; break;
-		case 'r': pieceType = Pieces::ROOK; break;
+		case 'p': pieceType = Pieces::PAWN;   break;
+		case 'r': pieceType = Pieces::ROOK;   break;
 		case 'n': pieceType = Pieces::KNIGHT; break;
 		case 'b': pieceType = Pieces::BISHOP; break;
-		case 'q': pieceType = Pieces::QUEEN; break;
+		case 'q': pieceType = Pieces::QUEEN;  break;
 		case 'k': pieceType = Pieces::KING;
-			if (color == Color::WHITE)
-				whiteKingPos = { row, col };
-			else
-				blackKingPos = { row, col };
+			if (IsWhite(color)) whiteKingPos = { row, col };
+			else				blackKingPos = { row, col };
 			break;
 		default: pieceType = Pieces::NONE; break;
 		}
@@ -795,7 +791,7 @@ void Engine::AppendUndoList(BoardState state, const Move move)
 	state.halfmoveClock = halfmoves;
 	state.wasEnPassant = move.wasEnPassant;
 	state.wasCastling = move.wasCastle;
-	state.playerToMove = (currentPlayer == Color::WHITE);
+	state.playerToMove = IsWhite(currentPlayer);
 	undoHistory.push_back(state);
 }
 
@@ -823,7 +819,7 @@ void Engine::UndoMove()
 	undoHistory.pop_back();
 
 	Color player = lastState.playerToMove ? Color::WHITE : Color::BLACK;
-	Color enemy = (player == Color::WHITE) ? Color::BLACK : Color::WHITE;
+	Color enemy = Opponent(player);
 
 	// Restore pieces
 	int fromRow = lastState.fromSquare / 8;
@@ -842,7 +838,7 @@ void Engine::UndoMove()
 	// Restore king position if needed
 	if (movedPiece.GetType() == Pieces::KING)
 	{
-		if (player == Color::WHITE)
+		if (IsWhite(player))
 			whiteKingPos = { fromRow, fromCol };
 		else
 			blackKingPos = { fromRow, fromCol };
@@ -851,7 +847,7 @@ void Engine::UndoMove()
 	// Handle en passant capture
 	if (lastState.wasEnPassant)
 	{
-		int pawnRow = (player == Color::WHITE) ? toRow + 1 : toRow - 1;
+		int pawnRow = IsWhite(player) ? toRow + 1 : toRow - 1;
 		board[pawnRow][toCol].SetPiece(Piece(Pieces::PAWN, enemy));
 		board[toRow][toCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
 	}
@@ -860,7 +856,7 @@ void Engine::UndoMove()
 	if (lastState.wasCastling)
 	{
 		bool kingside = (toCol == 6);
-		int row = (player == Color::WHITE) ? 7 : 0;
+		int row = IsWhite(player) ? 7 : 0;
 		int rookStartCol = kingside ? 7 : 0;
 		int rookEndCol = kingside ? 5 : 3;
 		board[row][rookStartCol].SetPiece(board[row][rookEndCol].GetPiece());
@@ -914,7 +910,7 @@ void Engine::UndoTurn()
 
 void Engine::SetBot(Bot* bot)
 {
-	if (bot->GetColor() == Color::WHITE)
+	if (IsWhite(bot->GetColor()))
 	{
 		bots[0] = bot;
 		botPlaying[0] = true;
@@ -955,7 +951,7 @@ void Engine::UpdateCastlingRights(const Move move, const Piece movingPiece, cons
 
 	if (movingPiece.GetType() == Pieces::KING)
 	{
-		if (currentPlayer == Color::WHITE)
+		if (IsWhite(currentPlayer))
 		{
 			whiteKingPos = { move.endRow, move.endCol };
 			whiteCastlingRights[0] = false;
@@ -970,7 +966,7 @@ void Engine::UpdateCastlingRights(const Move move, const Piece movingPiece, cons
 	}
 	else if (movingPiece.GetType() == Pieces::ROOK)
 	{
-		if (currentPlayer == Color::WHITE)
+		if (IsWhite(currentPlayer))
 		{
 			if (move.startRow == 7 && move.startCol == 0) // a1 rook
 				whiteCastlingRights[0] = false;
@@ -988,7 +984,7 @@ void Engine::UpdateCastlingRights(const Move move, const Piece movingPiece, cons
 	// If rook is captured, invalidate castling rights
 	if (targetPiece.GetType() == Pieces::ROOK)
 	{
-		if (currentPlayer == Color::WHITE)
+		if (IsWhite(currentPlayer))
 		{
 			if (move.endRow == 0 && move.endCol == 0) // a8 rook
 				blackCastlingRights[0] = false;

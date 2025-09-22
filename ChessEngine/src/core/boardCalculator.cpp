@@ -36,7 +36,7 @@ bool BoardCalculator::IsSquareAttacked(int row, int col, Color byColor, const Sq
 		return false;
 
 	// 1. Pawns
-	int pawnDir = (byColor == Color::WHITE) ? 1 : -1;
+	int pawnDir = IsWhite(byColor) ? 1 : -1;
 	if (InBounds(row + pawnDir, col - 1)) {
 		Piece p = board[row + pawnDir][col - 1].GetPiece();
 		if (p.GetType() == Pieces::PAWN && p.GetColor() == byColor) return true;
@@ -176,7 +176,7 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 		}
 
 		// Check if king is attacked
-		Color enemy = (color == Color::WHITE) ? Color::BLACK : Color::WHITE;
+		Color enemy = Opponent(color);
 		if (!IsSquareAttacked(currentKingRow, currentKingCol, enemy, tempBoard))
 			validMoves.push_back(idx); // Legal move
 
@@ -186,148 +186,6 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 	}
 
 	return validMoves;
-}
-
-struct TmpFileGuard
-{
-	const std::string filename;
-	TmpFileGuard(std::string fname) : filename(std::move(fname)) {}
-	~TmpFileGuard()
-	{
-		std::remove(filename.c_str());
-	}
-};
-
-
-//StockfishPerftResult BoardCalculator::StockfishPerft(const std::string& stockfishPath, const std::string& fen, int depth)
-//{
-//	const char* tmpFilename = "stockfish_uci_commands.txt";
-//	TmpFileGuard fileGuard(tmpFilename); // Ensures file is deleted when function exits
-//
-//	// --- 1. Write the UCI commands to a temporary file ---
-//	{ // Use a scope to ensure the file is closed before we use it
-//		std::ofstream cmdFile(tmpFilename);
-//		if (!cmdFile) {
-//			throw std::runtime_error("Failed to create temporary command file.");
-//		}
-//		cmdFile << "position fen " << fen << std::endl;
-//		cmdFile << "go perft " << std::to_string(depth) << std::endl;
-//		cmdFile << "quit" << std::endl; // Tell Stockfish to exit cleanly
-//	}
-//
-//	// --- 2. Build the shell command to run Stockfish with input redirection ---
-//	// The "<" tells the shell to feed our file into the program's standard input
-//	std::string command = "\"" + stockfishPath + "\" < " + tmpFilename;
-//
-//	// --- 3. Execute the command and open a pipe to read its output ---
-//	std::string result;
-//	std::array<char, 256> buffer;
-//
-//	// The unique_ptr ensures _pclose is called automatically, even if an error occurs
-//	std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), _pclose);
-//	if (!pipe)
-//	{
-//		throw std::runtime_error("Failed to start Stockfish process with _popen.");
-//	}
-//
-//	// --- 4. Read the entire output from the pipe ---
-//	while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
-//	{
-//		result += buffer.data();
-//	}
-//
-//	StockfishPerftResult out;
-//	out.nodes = 0;
-//
-//	std::istringstream iss(result);
-//	std::string line;
-//	while (std::getline(iss, line))
-//	{
-//		// Trim whitespace
-//		if (line.empty()) continue;
-//
-//		// Look for final nodes line: "Nodes searched: N"
-//		const std::string searchString = "Nodes searched: ";
-//		size_t pos = line.find(searchString);
-//		if (pos != std::string::npos)
-//		{
-//			std::string numberStr = line.substr(pos + searchString.length());
-//			out.nodes = std::stoll(numberStr);
-//			return out;
-//		}
-//
-//		// Look for move lines: e.g. "e2e4: 20"
-//		size_t colonPos = line.find(':');
-//		if (colonPos != std::string::npos)
-//		{
-//			if (colonPos > 6) continue; // If debugging statement
-//			std::string move = line.substr(0, colonPos);
-//			// remove whitespace if any
-//			move.erase(remove_if(move.begin(), move.end(), ::isspace), move.end());
-//			if (!move.empty())
-//			{
-//				out.moves.push_back(move);
-//			}
-//			continue;
-//		}
-//
-//	}
-//
-//	return out;
-//}
-
-// Compare your engine's moves vs Stockfish's moves
-void BoardCalculator::CompareMoveLists(const std::vector<Move>& myMoves,
-	const std::vector<std::string>& sfMoves)
-{
-	// Convert myMoves to UCI strings
-	std::unordered_set<std::string> mySet;
-	for (const auto& move : myMoves)
-	{
-		mySet.insert(move.ToUCIString());
-	}
-
-	// Put Stockfish moves into a set
-	std::unordered_set<std::string> sfSet(sfMoves.begin(), sfMoves.end());
-
-	// Find moves in my engine but not in Stockfish
-	std::vector<std::string> onlyMine;
-	for (const auto& m : mySet)
-	{
-		if (sfSet.find(m) == sfSet.end())
-		{
-			onlyMine.push_back(m);
-		}
-	}
-
-	// Find moves in Stockfish but not in my engine
-	std::vector<std::string> onlyStockfish;
-	for (const auto& m : sfSet)
-	{
-		if (mySet.find(m) == mySet.end())
-		{
-			onlyStockfish.push_back(m);
-		}
-	}
-
-	// Print results
-	if (onlyMine.empty() && onlyStockfish.empty())
-	{
-		std::cout << "Move lists match!\n";
-	}
-	else
-	{
-		if (!onlyMine.empty())
-		{
-			std::cout << "Extra moves in my engine:\n";
-			for (auto& m : onlyMine) std::cout << "  " << m << "\n";
-		}
-		if (!onlyStockfish.empty())
-		{
-			std::cout << "Missing moves (Stockfish has these but I don't):\n";
-			for (auto& m : onlyStockfish) std::cout << "  " << m << "\n";
-		}
-	}
 }
 
 std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square board[8][8], Engine* engine)
@@ -375,7 +233,7 @@ void BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const S
 				if ((color == Color::WHITE && i == 1) ||
 					(color == Color::BLACK && i == 6))
 				{
-					int endRow = (color == Color::WHITE) ? 0 : 7;
+					int endRow = IsWhite(color) ? 0 : 7;
 
 					for (int dc = -1; dc <= 1; ++dc)
 					{
@@ -486,8 +344,8 @@ uint8_t BoardCalculator::FindPiece(Piece piece, const Square board[8][8])
 bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
 {
 	Color player = GameState::currentPlayer;
-	Color enemy = (player == Color::WHITE) ? Color::BLACK : Color::WHITE;
-	int row = (player == Color::WHITE) ? 7 : 0;
+	Color enemy = Opponent(player);
+	int row = IsWhite(player) ? 7 : 0;
 
 	// 1. Check if castling rights exist
 	if ((player == Color::WHITE && !GameState::whiteCastlingRights[kingside ? 1 : 0]) ||
@@ -505,12 +363,14 @@ bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
 	int squaresToMove = kingside ? 2 : 3;
 	for (int i = 1; i <= squaresToMove; ++i)
 	{
-		if (i != 3 && !board[row][kingColumn + (step * i)].IsEmpty())
+		if (!board[row][kingColumn + (step * i)].IsEmpty())
+		{
 			return false;
+		}
 	}
 
 	// 4. Squares king moves through are attacked
-	int squaresToMoveThrough = kingside ? 2 : 2;
+	int squaresToMoveThrough = 2;
 	for (int i = 1; i <= squaresToMoveThrough; ++i)
 	{
 		if (IsSquareAttacked(row, kingColumn + (step * i), enemy, board))
@@ -533,7 +393,7 @@ void BoardCalculator::AddKingMoves(int row, int col, Color color, std::array<boo
 			if (target.GetType() == Pieces::NONE || target.GetColor() != color)
 			{
 				// Check for moving into check
-				if (!IsSquareAttacked(nr, nc, (color == Color::WHITE) ? Color::BLACK : Color::WHITE, board))
+				if (!IsSquareAttacked(nr, nc, Opponent(color), board))
 					moves[nr * 8 + nc] = true;
 			}
 		}
@@ -550,12 +410,11 @@ void BoardCalculator::AddKingMoves(int row, int col, Color color, std::array<boo
 		int castlingCol = col - 2;
 		moves[row * 8 + castlingCol] = true;
 	}
-
 }
 
 void BoardCalculator::AddPawnMoves(int row, int col, Color color, std::array<bool, 64>& moves, const Square board[8][8])
 {
-	int dir = (color == Color::WHITE) ? -1 : 1;  // White pawns move "up" (row decreases), black "down" (row increases)
+	int dir = IsWhite(color) ? -1 : 1;  // White pawns move "up" (row decreases), black "down" (row increases)
 
 	// One square forward
 	int nr = row + dir;

@@ -10,9 +10,9 @@
 #include <cstdlib>
 #include <ctime>
 
-Uci::Uci(Engine* engine, Bot* bot) : engine(engine), bot(bot)
-{
-}
+Uci::Uci(Engine* engine, Bot* bot)
+    : engine(engine), bot(bot)
+{}
 
 void Uci::Loop()
 {
@@ -36,18 +36,9 @@ void Uci::HandleCommand(const std::string& line)
         std::cout << "id author Joeger" << std::endl;
         std::cout << "uciok" << std::endl;
     }
-    else if (token == "isready")
-    {
-        std::cout << "readyok" << std::endl;
-    }
-    else if (token == "position")
-    {
-        HandlePosition(iss);
-    }
-    else if (token == "go")
-    {
-        HandleGo(iss);
-    }
+    else if (token == "isready")  std::cout << "readyok" << std::endl;
+    else if (token == "position") HandlePosition(iss);
+    else if (token == "go")       HandleGo(iss);
     else if (token == "ucinewgame")
     {
         // Should probably clean this up
@@ -71,10 +62,7 @@ void Uci::HandleCommand(const std::string& line)
         delete bot;
         bot = new Bot(engine, Color::WHITE);
     }
-    else if (token == "quit")
-    {
-        exit(0);
-    }
+    else if (token == "quit") exit(0);
 }
 
 void Uci::HandlePosition(std::istringstream& iss)
@@ -83,31 +71,31 @@ void Uci::HandlePosition(std::istringstream& iss)
     std::getline(iss, line);
     
     std::string token;
-    std::istringstream line_ss(line);
-    line_ss >> token;
+    std::istringstream lineSS(line);
+    lineSS >> token;
 
     if (token == "startpos")
     {
         engine->LoadPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-        line_ss >> token; // "moves"
+        lineSS >> token; // "moves"
     }
     else if (token == "fen")
     {
         std::string fen;
         std::string fen_part;
-        for(int i=0; i<6; ++i)
+        for (int i = 0; i < 6; ++i)
         {
-            line_ss >> fen_part;
+            lineSS >> fen_part;
             fen += fen_part + " ";
         }
         engine->LoadPosition(fen);
-        line_ss >> token; // "moves"
+        lineSS >> token; // "moves"
     }
 
     if (token == "moves")
     {
         std::string moveString;
-        while (line_ss >> moveString)
+        while (lineSS >> moveString)
         {
             Move move = ParseMove(moveString);
             engine->MakeMove(move);
@@ -119,20 +107,17 @@ void Uci::HandleGo(std::istringstream& iss)
 {
     int wtime = 300000; // Default 5 minutes
     int btime = 300000;
+
     std::string token;
     while (iss >> token)
     {
-        if (token == "wtime")
-        {
-            iss >> wtime;
-        } else if (token == "btime")
-        {
-            iss >> btime;
-        }
+        if (token == "wtime")      iss >> wtime;
+        else if (token == "btime") iss >> btime;
     }
 
     bot->SetColor(engine->GetCurrentPlayer());
     Move bestMove = bot->GetMoveUCI(wtime, btime);
+
     std::cout << "bestmove " << bestMove.ToUCIString() << std::endl;
     std::cout.flush();
 }

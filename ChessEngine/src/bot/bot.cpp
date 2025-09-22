@@ -12,6 +12,9 @@
 #undef max
 using namespace std::chrono;
 
+constexpr int INF = std::numeric_limits<int>::max() / 4;
+constexpr int MATE_VAL = 1000000;
+
 uint32_t PackMove(const Move& m)
 {
 	uint32_t s = m.startRow * 8 + m.startCol;
@@ -39,6 +42,9 @@ Bot::Bot(Engine* engine, Color color)
 {
 	this->engine = engine;
 	this->botColor = color;
+
+	for (int i = 0; i < 128; ++i)
+		moveLists[i].clear();
 }
 
 int PieceValue(Piece piece)
@@ -59,7 +65,7 @@ int PieceValue(Piece piece)
 const int captureBonus = 1000000;
 const int killerBonus = 500000;
 
-int Bot::ScoreMove(const Move move, int ply)
+int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 {
 	Piece moved = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
 	Piece captured = engine->GetBoard()[move.endRow][move.endCol].GetPiece();
@@ -68,19 +74,20 @@ int Bot::ScoreMove(const Move move, int ply)
 	if (captured.GetType() != Pieces::NONE)
 		return captureBonus + PieceValue(captured) * 16 - PieceValue(moved);
 
+	if (onlyMVVLVA) return 0;
 	//if (move == killerMoves[ply][0]) return killerBonus;
 	//else if (move == killerMoves[ply][1]) return killerBonus - 100;
-	//if (ply >= 4)
-		//return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType()][move.startRow * 8 + move.startCol][move.endRow * 8 + move.endCol];
+	if (ply >= 3)
+		return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType()][move.startRow * 8 + move.startCol][move.endRow * 8 + move.endCol];
 	return 0;
 }
 
 // Orders moves in-place, best first
-void Bot::OrderMoves(std::vector<Move>& moves, int ply, Move firstMove)
+void Bot::OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove)
 {
 	std::sort(moves.begin(), moves.end(),
 		[&](const Move& a, const Move& b) {
-			return ScoreMove(a, ply) > ScoreMove(b, ply);
+			return ScoreMove(a, ply, onlyMVVLVA) > ScoreMove(b, ply, onlyMVVLVA);
 		});
 
 	if (!firstMove.IsNull())
@@ -117,12 +124,12 @@ void Bot::Clear()
 Move Bot::GetMoveUCI(int wtime, int btime)
 {
 	uci = true;
-	int time_for_move;
-	if (botColor == Color::WHITE) {
-		time_for_move = wtime / 20;
-	} else {
-		time_for_move = btime / 20;
-	}
+	int timeForMove;
+	if (IsWhite(botColor))
+		timeForMove = wtime / 20;
+	else
+		timeForMove = btime / 20;
+
 	timePerTurn = 500;
 	Move move = GetMove();
 	return move;
@@ -145,41 +152,34 @@ Move Bot::GetMove()
 	//memset(killerMoves, 0, sizeof(killerMoves));
 
 	// Decay history heuristic scores
-	//for (int i = 0; i < 2; i++)
-	//	for (int j = 0; j < NUM_PIECES; j++)
-	//		for (int k = 0; k < 64; k++)
-	//			for (int l = 0; l < 64; l++)
-	//				historyHeuristic[i][j][k][l] /= 2;
+	for (int i = 0; i < 2; i++)
+		for (int j = 0; j < NUM_PIECES; j++)
+			for (int k = 0; k < 64; k++)
+				for (int l = 0; l < 64; l++)
+					historyHeuristic[i][j][k][l] /= 2;
 
 	int maxDepth = 8;
 	Move bestMove = Move();
-	int bestScore;
-	if (botColor == Color::WHITE) bestScore = std::numeric_limits<int>::min();
-	else						  bestScore = std::numeric_limits<int>::max();
+	int bestScore = -INF;
 
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
 		//std::cout << "Depth: " << depth << std::endl;
-		int alpha = std::numeric_limits<int>::min();
-		int beta = std::numeric_limits<int>::max();
+		int alpha = -INF;// std::numeric_limits<int>::min();
+		int beta = INF;// std::numeric_limits<int>::max();
 		bool foundLegal = false;
 
 		Move currentBestMove = Move();
-		int currentBestScore;
+		int currentBestScore = -INF;
 
 		std::vector<Move> moves = BoardCalculator::GetAllMoves(botColor, engine->GetBoard(), engine);
 		if (!bestMove.IsNull()) // Current best move first to help with pruning
-			OrderMoves(moves, 0, bestMove);
+			OrderMoves(moves, 0, false, bestMove);
 		else
 		{
-			OrderMoves(moves, 0);
-			bestMove = moves[0]; // If not enough time to find move, set default after sorting
+			OrderMoves(moves, 0, false);
+			if (!moves.empty()) bestMove = moves[0]; // If not enough time to find move, set default after sorting
 		}
-
-		bool isWhite = botColor == Color::WHITE;
-
-		if (isWhite) currentBestScore = std::numeric_limits<int>::min();
-		else         currentBestScore = std::numeric_limits<int>::max();
 
 		for (const Move& move : moves)
 		{
@@ -191,7 +191,8 @@ Move Bot::GetMove()
 
 			foundLegal = true;
 
-			int score = Search(depth - 1, 0, Color::WHITE, alpha, beta);
+			int score = -Search(depth - 1, 1, -beta, -alpha);
+
 			engine->UndoMove();
 
 			if (quitEarly)
@@ -204,21 +205,16 @@ Move Bot::GetMove()
 				break;
 			}
 
-			if (isWhite && (score > currentBestScore))
+			if (score > currentBestScore)
 			{
 				//std::cout << "Assigning best move (greater) " << move.ToString() << " with score " << score << '\n';
 				currentBestScore = score;
 				currentBestMove = move;
 			}
-			else if (!isWhite && (score < currentBestScore))
-			{
-				//std::cout << "Assigning best move (less than) " << move.ToString() << " with score " << score << '\n';
-				currentBestScore = score;
-				currentBestMove = move;
-			}
 
-			if (isWhite) alpha = std::max(alpha, currentBestScore);
-			else		 beta  = std::min(beta, currentBestScore);
+			alpha = std::max(alpha, currentBestScore);
+			if (alpha >= beta)
+				break;
 		}
 
 		if (foundLegal)
@@ -231,12 +227,7 @@ Move Bot::GetMove()
 			else
 			{
 				// If better move found in partial search
-				if (isWhite && currentBestScore > bestScore)
-				{
-					bestScore = currentBestScore;
-					bestMove = currentBestMove;
-				}
-				else if (!isWhite && currentBestScore < bestScore)
+				if (currentBestScore > bestScore)
 				{
 					bestScore = currentBestScore;
 					bestMove = currentBestMove;
@@ -247,7 +238,7 @@ Move Bot::GetMove()
 
 		// Extradite mate
 		// Cast to avoid integer overflow
-		if (std::abs((long long)bestScore) > 2000000000)
+		if (std::abs((long long)bestScore) >= (MATE_VAL - 1000))
 			break;
 
 		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
@@ -262,7 +253,7 @@ Move Bot::GetMove()
 	}
 
 
-	//std::cout << "Making " << bestMove.ToString() << " with score " << bestScore << '\n';
+	std::cout << "Making " << bestMove.ToString() << " with score " << bestScore << '\n';
 	std::cout << "Searched " << nodesSearched << "\n";
 	nodesSearched = 0;
 
@@ -275,9 +266,9 @@ Move Bot::GetMove()
 		throw "Move was null\n";
 }
 
-int Bot::Search(int depth, int ply, Color maximizingColor, int alpha, int beta)
+int Bot::Search(int depth, int ply, int alpha, int beta)
 {
-	nodesSearched++;
+	++nodesSearched;
 	// Check time every 1028 nodes (& faster than %)
 	if ((nodesSearched & 0x1027) == 0)
 	{
@@ -289,13 +280,13 @@ int Bot::Search(int depth, int ply, Color maximizingColor, int alpha, int beta)
 		}
 	}
 
-	if (engine->IsThreefold())
-		return 0; // Draw by repetition
+	if (engine->IsDraw())
+		return 0;
 
 	if (depth == 0 || engine->IsOver())
 	{
-		return Qsearch(alpha, beta, maximizingColor);
-		//return engine->Eval();
+		return Qsearch(alpha, beta, 1);
+		//return Eval(GameState::currentPlayer, engine->GetBoard());
 	}
 
 	uint64_t key = engine->GetZobristKey();
@@ -309,7 +300,7 @@ int Bot::Search(int depth, int ply, Color maximizingColor, int alpha, int beta)
 
 	std::vector<Move>& moves = moveLists[ply];
 	BoardCalculator::GetAllMoves(moves, movingColor, engine->GetBoard(), engine);
-	OrderMoves(moves, ply);
+	OrderMoves(moves, ply, false);
 
 	// If we probed a move from TT, move it to the front
 	if (ttMove)
@@ -322,15 +313,16 @@ int Bot::Search(int depth, int ply, Color maximizingColor, int alpha, int beta)
 			std::swap(moves[0], *it);
 	}
 
-	int bestScore;
+	int originalAlpha = alpha;
+	//int bestScore = -INF;
 	uint32_t bestMove32 = 0;
-	uint8_t flag;
+	uint8_t flag = TT_ALPHA;
 
-	bool maximizing = movingColor == maximizingColor;
+	//bool maximizing = movingColor == maximizingColor;
 
-	int bestEval;
-	if (maximizing) bestEval = std::numeric_limits<int>::min();
-	else			bestEval = std::numeric_limits<int>::max();
+	int bestEval = -INF;
+	//if (maximizing) bestEval = std::numeric_limits<int>::min();
+	//else			bestEval = std::numeric_limits<int>::max();
 
 	// Loop through moves
 	for (const Move& move : moves)
@@ -342,51 +334,41 @@ int Bot::Search(int depth, int ply, Color maximizingColor, int alpha, int beta)
 		bool opponentInCheck = engine->InCheck(Opponent(movingColor));
 
 		foundLegal = true;
-		int eval = Search(depth - 1, ply + 1, maximizingColor, alpha, beta);
+
+		int eval = -Search(depth - 1, ply + 1, -beta, -alpha);
+
 		engine->UndoMove();
 
 		if (quitEarly)
 			return 0;
 
-		if (maximizing)
+		if (eval > bestEval)
 		{
-			if (eval > bestEval)
-			{
-				bestEval = eval;
-				bestMove32 = PackMove(move);
-			}
-		}
-		else
-		{
-			if (eval < bestEval)
-			{
-				bestEval = eval;
-				bestMove32 = PackMove(move);
-			}
+			bestEval = eval;
+			bestMove32 = PackMove(move);
 		}
 
-		if (maximizing) alpha = std::max(alpha, eval);
-		else			  beta  = std::min(beta, eval);
-		if (beta <= alpha)
+		alpha = std::max(alpha, eval);
+		if (alpha >= beta)
 		{
-			//if (!move.IsCapture(engine->GetBoard()) && (Pieces)move.promotion == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
-			//{
-			//	//if (killerMoves[ply][0] != move)
-			//	//{
-			//	//	killerMoves[ply][1] = killerMoves[ply][0];
-			//	//	killerMoves[ply][0] = move;
-			//	//}
+			if (!move.IsCapture(engine->GetBoard()) && (Pieces)move.promotion == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
+			{
+				//if (killerMoves[ply][0] != move)
+				//{
+				//	killerMoves[ply][1] = killerMoves[ply][0];
+				//	killerMoves[ply][0] = move;
+				//}
 
-			//	if (ply >= 4)
-			//	{
-			//		int from = move.startRow * 8 + move.startCol;
-			//		int to = move.endRow * 8 + move.endCol;
-			//		Piece piece = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
-			//		int pieceType = (int)piece.GetType();
+				if (ply >= 3)
+				{
+					int from = move.startRow * 8 + move.startCol;
+					int to = move.endRow * 8 + move.endCol;
+					Piece piece = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
+					int pieceType = (int)piece.GetType();
 
-			//		historyHeuristic[(int)piece.GetColor()][pieceType][from][to] += depth * depth;
-			//	}
-			//}
+					historyHeuristic[(int)piece.GetColor()][pieceType][from][to] += depth * depth;
+				}
+			}
 			break;
 		}
 	}
@@ -397,17 +379,14 @@ int Bot::Search(int depth, int ply, Color maximizingColor, int alpha, int beta)
 		engine->CheckKingInCheck();
 		if (engine->InCheck(movingColor))
 		{
-			if (movingColor == Color::BLACK)
-				bestEval = std::numeric_limits<int>::max() - depth;
-			else
-				bestEval = -(std::numeric_limits<int>::max() - depth);
+			bestEval = -(MATE_VAL - ply);
 		}
 		else bestEval = 0; // Stalemate
 	}
 
 	// Update TT
-	bestScore = bestEval;
-	if (bestScore <= alpha) flag = TT_ALPHA;
+	int bestScore = bestEval;
+	if (bestScore <= originalAlpha) flag = TT_ALPHA;
 	else if (bestScore >= beta) flag = TT_BETA;
 	else flag = TT_EXACT;
 
@@ -415,60 +394,51 @@ int Bot::Search(int depth, int ply, Color maximizingColor, int alpha, int beta)
 	return bestScore;
 }
 
-int Bot::Qsearch(int alpha, int beta, Color maximizingPlayer)
+int Bot::Qsearch(int alpha, int beta, int ply)
 {
 	nodesSearched++;
-	int baseEval = Eval(engine->GetBoard());  // Static eval
+
+	int standPat = Eval(GameState::currentPlayer, engine->GetBoard());
+
+	const int QSEARCH_PLY_MAX = 8;
+	if (ply >= QSEARCH_PLY_MAX)
+		return standPat;
+
+	// Fail-hard beta cutoff
+	if (standPat >= beta)
+		return beta;
+	if (standPat > alpha)
+		alpha = standPat;
 
 	Color movingColor = GameState::currentPlayer;
 
-	// Fail-hard beta cutoff
-	if (movingColor == maximizingPlayer)
-	{
-		if (baseEval >= beta)
-			return beta;
-		if (baseEval > alpha)
-			alpha = baseEval;
-	}
-	else
-	{
-		if (baseEval <= alpha)
-			return alpha;
-		if (baseEval < beta)
-			beta = baseEval;
-	}
+	const int DELTA_MARGIN = 200; // Centipawns
+	if (standPat + DELTA_MARGIN < alpha)
+		return alpha; // Position too bad, don’t bother with captures
 
-	// Generate only "noisy" moves (captures, promotions, maybe checks)
+	// Generate only "noisy" moves (captures, promotions, checks)
 	bool onlyNoisy = true;
 	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard(), engine, onlyNoisy);
+	OrderMoves(moves, 0, true);
 
 	for (const Move& move : moves)
 	{
 		engine->MakeMove(move);
-		if (engine->InCheck(maximizingPlayer)) // Skip illegal moves
+		if (engine->InCheck(Opponent(GameState::currentPlayer))) // Skip illegal moves
 		{
 			engine->UndoMove();
 			continue;
 		}
 
-		int score = Qsearch(alpha, beta, maximizingPlayer);
+		int score = -Qsearch(-beta, -alpha, ply + 1);
 		engine->UndoMove();
 
-		if (movingColor == maximizingPlayer)
-		{
-			if (score >= beta)
-				return beta; // Cutoff
-			if (score > alpha)
-				alpha = score;
-		}
-		else
-		{
-			if (score <= alpha)
-				return alpha; // Cutoff
-			if (score < beta)
-				beta = score;
-		}
+		if (score >= beta)
+			return beta; // Cutoff
+
+		if (score > alpha)
+			alpha = score;
 	}
 
-	return (movingColor == maximizingPlayer) ? alpha : beta;
+	return alpha;
 }

@@ -10,9 +10,9 @@ struct Move
 {
 	Move(int startCol = 0, int startRow = 0, int endCol = 0, int endRow = 0, int promotion = 6,
         bool wasEnPassant = false, bool wasCastle = false);
-	int startCol, startRow;
-	int endCol, endRow;
-	int promotion;     // Promotion piece, if any
+	uint8_t startCol, startRow;
+	uint8_t endCol, endRow;
+	uint8_t promotion;     // Promotion piece, if any
 	bool wasEnPassant, wasCastle;
 
 	const char* ToString() const;

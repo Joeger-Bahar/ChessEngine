@@ -27,14 +27,14 @@ public:
 	void Clear();
 
 private:
-	int Search(int depth, int ply, Color maximizingColor, int alpha, int beta);
-	int Qsearch(int alpha, int beta, Color maximizingPlayer);
-	int ScoreMove(const Move move, int ply);
-	void OrderMoves(std::vector<Move>& moves, int ply, Move firstMove = Move());
+	int Search(int depth, int ply, int alpha, int beta);
+	int Qsearch(int alpha, int beta, int ply);
+	int ScoreMove(const Move move, int ply, bool onlyMVVLVA);
+	void OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove = Move());
 
 	TranspositionTable tt;
 	// [color][pieces][start square][end square]
-	//int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
+	int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
 	Engine* engine;
 	Color botColor;
 	std::vector<Move> moveLists[MAX_PLY];

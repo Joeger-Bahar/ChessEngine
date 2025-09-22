@@ -4,6 +4,8 @@
 
 #include <SDL/SDL_image.h>
 
+#include "core/boardCalculator.hpp"
+
 GraphicsEngine::GraphicsEngine()
 {
 	Initialize();
@@ -63,12 +65,12 @@ void GraphicsEngine::RenderPieces(Square board[8][8])
 			int pieceIndex = -1;
 			switch (piece.GetType())
 			{
-			case Pieces::KING:   pieceIndex = (piece.GetColor() == Color::WHITE) ? 0 : 6; break;
-			case Pieces::QUEEN:  pieceIndex = (piece.GetColor() == Color::WHITE) ? 1 : 7; break;
-			case Pieces::BISHOP: pieceIndex = (piece.GetColor() == Color::WHITE) ? 2 : 8; break;
-			case Pieces::KNIGHT: pieceIndex = (piece.GetColor() == Color::WHITE) ? 3 : 9; break;
-			case Pieces::ROOK:   pieceIndex = (piece.GetColor() == Color::WHITE) ? 4 : 10; break;
-			case Pieces::PAWN:   pieceIndex = (piece.GetColor() == Color::WHITE) ? 5 : 11; break;
+			case Pieces::KING:   pieceIndex = IsWhite(piece.GetColor()) ? 0 : 6; break;
+			case Pieces::QUEEN:  pieceIndex = IsWhite(piece.GetColor()) ? 1 : 7; break;
+			case Pieces::BISHOP: pieceIndex = IsWhite(piece.GetColor()) ? 2 : 8; break;
+			case Pieces::KNIGHT: pieceIndex = IsWhite(piece.GetColor()) ? 3 : 9; break;
+			case Pieces::ROOK:   pieceIndex = IsWhite(piece.GetColor()) ? 4 : 10; break;
+			case Pieces::PAWN:   pieceIndex = IsWhite(piece.GetColor()) ? 5 : 11; break;
 			default: throw "Piece not in list";
 			}
 

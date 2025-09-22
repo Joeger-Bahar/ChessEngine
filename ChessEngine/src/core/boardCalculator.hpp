@@ -9,6 +9,7 @@
 #include "move.hpp"
 
 #define Opponent(c) ((c) == Color::WHITE ? Color::BLACK : Color::WHITE)
+#define IsWhite(c)  (c == Color::WHITE)
 
 class BoardCalculator
 {

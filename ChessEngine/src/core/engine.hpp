@@ -41,9 +41,11 @@ public:
 	std::string GetFEN() const; // Get current position in FEN notation
 	uint64_t ComputeFullHash() const;
 
+	bool IsDraw() const;
 	bool IsThreefold() const;
+	bool Is50Move() const;
 	inline const bool IsOver() const { return GameState::checkmate || GameState::draw; }
-	inline const bool InCheck(Color color) { return (GameState::checkStatus & (color == Color::WHITE ? 0b10 : 0b01)) != 0; }
+	inline const bool InCheck(Color color) { return (GameState::checkStatus & (IsWhite(color) ? 0b10 : 0b01)) != 0; }
 	inline const bool IsCheckmate(Color color) { return GameState::checkmate && InCheck(color); }
 
 	int PieceToIndex(const Piece& p) const;
@@ -58,7 +60,7 @@ private:
 	void AppendUndoList(BoardState state, const Move move);
 	bool HandleSpecialNotation(); // Returns if there was notation or not
 
-	inline void ChangePlayers() { GameState::currentPlayer = (GameState::currentPlayer == Color::WHITE) ? Color::BLACK : Color::WHITE; }
+	inline void ChangePlayers() { GameState::currentPlayer = Opponent(GameState::currentPlayer); }
 
 	Square board[8][8];
 	GraphicsEngine graphics;

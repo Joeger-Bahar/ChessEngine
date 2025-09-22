@@ -120,7 +120,7 @@ int queenPST[64] = {
    -20,-10,-10, -5, -5,-10,-10,-20
 };
 
-int Eval(const Square board[8][8])
+int Eval(Color player, const Square board[8][8])
 {
 	int score = 0;
 	const int pieceValues[] = { 0, 100, 320, 330, 500, 900, 100000 };
@@ -143,7 +143,7 @@ int Eval(const Square board[8][8])
 
 			int value = pieceValues[static_cast<int>(piece.GetType()) + 1];
 
-			if (piece.GetColor() == Color::WHITE)
+			if (IsWhite(piece.GetColor()))
 			{
 				score += value;
 
@@ -218,12 +218,14 @@ int Eval(const Square board[8][8])
 		}
 	}
 
-	// pawn capture penalties to knights
+	// Pawn capture penalties to knights
 	int whitePawnsCaptured = 8 - whitePawns;
 	int blackPawnsCaptured = 8 - blackPawns;
 
 	score -= whiteKnights * (whitePawnsCaptured * 10);
 	score += blackKnights * (blackPawnsCaptured * 10);
+
+	if (player == Color::BLACK) score *= -1;
 
 	return score;
 }
