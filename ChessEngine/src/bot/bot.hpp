@@ -38,11 +38,10 @@ private:
 	Engine* engine;
 	Color botColor;
 	std::vector<Move> moveLists[MAX_PLY];
-	//Move killerMoves[MAX_PLY][2];
+	Move killerMoves[MAX_PLY][2];
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;
-	int timePerTurn = 500; // In milliseconds
+	int timePerTurn = 1500; // In milliseconds
 	bool quitEarly = false;
-	bool uci = false;
 };

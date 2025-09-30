@@ -35,7 +35,7 @@ public:
 	void CheckKingInCheck(); // Sets checkStatus
 	void CheckCheckmate();
 
-	const Square(&GetBoard() const)[8][8]{ return board; }
+	const Square(&GetBoard() const)[64]{ return board; }
 	const Color GetCurrentPlayer() const { return GameState::currentPlayer; }
 	const uint64_t GetZobristKey() { return zobristKey; }
 	std::string GetFEN() const; // Get current position in FEN notation
@@ -51,18 +51,17 @@ public:
 	int PieceToIndex(const Piece& p) const;
 	bool ValidMove(const Piece piece, const Move move); // Checks if the move is valid for the piece
 private:
-	bool StoreMove(); // Returns if there was a second click to make a move
+	bool StoreMove(Move& move);   // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move
 
 	void UpdateEndgameStatus();
 	void UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece);
 	void UpdateEnPassantSquare(const Move move);
 	void AppendUndoList(BoardState state, const Move move);
-	bool HandleSpecialNotation(); // Returns if there was notation or not
 
 	inline void ChangePlayers() { GameState::currentPlayer = Opponent(GameState::currentPlayer); }
 
-	Square board[8][8];
+	Square board[64];
 	GraphicsEngine graphics;
 
 	Zobrist zobrist;
@@ -75,10 +74,9 @@ private:
 	std::vector<Move> moveHistory;
 	std::vector<BoardState> undoHistory;
 
-	std::string notationMove; // Clicks are converted to notation
-	std::pair<int, int> firstClick; // Not static variable for rendering purposes
-	std::pair<int, int> whiteKingPos = { -1, -1 };
-	std::pair<int, int> blackKingPos = { -1, -1 };
+	int firstClick;			  // Not static variable for rendering purposes
+	int whiteKingPos = -1;
+	int blackKingPos = -1;
 
 	Bot* bots[2] = { nullptr, nullptr };
 	bool botPlaying[2] = { false, false };

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <chrono>
 #include <Windows.h>
+#include <omp.h>
 #undef min
 #undef max
 using namespace std::chrono;
@@ -17,8 +18,8 @@ constexpr int MATE_VAL = 1000000;
 
 uint32_t PackMove(const Move& m)
 {
-	uint32_t s = m.startRow * 8 + m.startCol;
-	uint32_t t = m.endRow * 8 + m.endCol;
+	uint32_t s = m.startSquare;
+	uint32_t t = m.endSquare;
 	// TODO: This is an incorrect packing of promotion
 	uint32_t promo = (m.promotion ? (m.promotion & 0x7) : 0); // user-defined
 	return (s) | (t << 6) | (promo << 12) | ((m.wasEnPassant ? 1u : 0u) << 15) | ((m.wasCastle ? 1u : 0u) << 16);
@@ -29,14 +30,13 @@ Move UnpackMove(uint32_t code)
 	Move m;
 	uint32_t s = code & 0x3F;
 	uint32_t t = (code >> 6) & 0x3F;
-	m.startRow = s / 8; m.startCol = s % 8;
-	m.endRow = t / 8;   m.endCol = t % 8;
+	m.startSquare = s;
+	m.endSquare = t;
 	m.promotion = (uint8_t)((code >> 12) & 0x7);
 	m.wasEnPassant = ((code >> 15) & 1);
 	m.wasCastle = ((code >> 16) & 1);
 	return m;
 }
-
 
 Bot::Bot(Engine* engine, Color color)
 {
@@ -67,19 +67,18 @@ const int killerBonus = 500000;
 
 int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 {
-	Piece moved = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
-	Piece captured = engine->GetBoard()[move.endRow][move.endCol].GetPiece();
+	Piece moved = engine->GetBoard()[move.startSquare].GetPiece();
+	Piece captured = engine->GetBoard()[move.endSquare].GetPiece();
 
 	// MVV-LVA: Most Valuable Victim - Least Valuable Attacker
 	if (captured.GetType() != Pieces::NONE)
 		return captureBonus + PieceValue(captured) * 16 - PieceValue(moved);
 
 	if (onlyMVVLVA) return 0;
-	//if (move == killerMoves[ply][0]) return killerBonus;
-	//else if (move == killerMoves[ply][1]) return killerBonus - 100;
-	if (ply >= 3)
-		return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType()][move.startRow * 8 + move.startCol][move.endRow * 8 + move.endCol];
-	return 0;
+	if (move == killerMoves[ply][0]) return killerBonus;
+	else if (move == killerMoves[ply][1]) return killerBonus - 100;
+
+	return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType()][move.startSquare][move.endSquare];
 }
 
 // Orders moves in-place, best first
@@ -114,16 +113,13 @@ void Bot::Clear()
 		moveLists[i].clear();
 
 	nodesSearched = 0;
-	//timePerTurn = 500; // In milliseconds
 	quitEarly = false;
-	uci = false;
 
 	tt.Clear();
 }
 
 Move Bot::GetMoveUCI(int wtime, int btime)
 {
-	uci = true;
 	int timeForMove;
 	if (IsWhite(botColor))
 		timeForMove = wtime / 20;
@@ -149,14 +145,14 @@ Move Bot::GetMove()
 	tt.NewSearch(); // age TT entries for this root search
 
 	// Clear killer moves before each search
-	//memset(killerMoves, 0, sizeof(killerMoves));
+	memset(killerMoves, 0, sizeof(killerMoves));
 
-	// Decay history heuristic scores
-	for (int i = 0; i < 2; i++)
-		for (int j = 0; j < NUM_PIECES; j++)
-			for (int k = 0; k < 64; k++)
-				for (int l = 0; l < 64; l++)
-					historyHeuristic[i][j][k][l] /= 2;
+	//// Decay history heuristic scores
+	for (int i = 0; i < 2; ++i)
+		for (int j = 0; j < NUM_PIECES; ++j)
+			for (int x = 0; x < 64; ++x)
+				for (int y = 0; y < 64; ++y)
+					historyHeuristic[i][j][x][y] /= 2;
 
 	int maxDepth = 8;
 	Move bestMove = Move();
@@ -164,9 +160,8 @@ Move Bot::GetMove()
 
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
-		//std::cout << "Depth: " << depth << std::endl;
-		int alpha = -INF;// std::numeric_limits<int>::min();
-		int beta = INF;// std::numeric_limits<int>::max();
+		int alpha = -INF;
+		int beta = INF;
 		bool foundLegal = false;
 
 		Move currentBestMove = Move();
@@ -183,7 +178,7 @@ Move Bot::GetMove()
 
 		for (const Move& move : moves)
 		{
-			Piece movingPiece = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
+			Piece movingPiece = engine->GetBoard()[move.startSquare].GetPiece();
 
 			engine->MakeMove(move);
 
@@ -207,7 +202,6 @@ Move Bot::GetMove()
 
 			if (score > currentBestScore)
 			{
-				//std::cout << "Assigning best move (greater) " << move.ToString() << " with score " << score << '\n';
 				currentBestScore = score;
 				currentBestMove = move;
 			}
@@ -236,9 +230,9 @@ Move Bot::GetMove()
 			}
 		}
 
-		// Extradite mate
+		// Extradite mate for bot
 		// Cast to avoid integer overflow
-		if (std::abs((long long)bestScore) >= (MATE_VAL - 1000))
+		if ((long long)bestScore >= (MATE_VAL - MAX_PLY))
 			break;
 
 		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
@@ -252,12 +246,10 @@ Move Bot::GetMove()
 			break;
 	}
 
-
-	std::cout << "Making " << bestMove.ToString() << " with score " << bestScore << '\n';
-	std::cout << "Searched " << nodesSearched << "\n";
+	std::cout << "Making " << bestMove.ToUCIString() << " with score " << bestScore << '\n';
 	nodesSearched = 0;
 
-	Piece movingPiece = engine->GetBoard()[bestMove.startRow][bestMove.startCol].GetPiece();
+	Piece movingPiece = engine->GetBoard()[bestMove.startSquare].GetPiece();
 	if (!engine->ValidMove(movingPiece, bestMove)) throw "Invalid move";
 
 	if (!bestMove.IsNull())
@@ -314,15 +306,12 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	}
 
 	int originalAlpha = alpha;
-	//int bestScore = -INF;
 	uint32_t bestMove32 = 0;
 	uint8_t flag = TT_ALPHA;
 
-	//bool maximizing = movingColor == maximizingColor;
-
 	int bestEval = -INF;
-	//if (maximizing) bestEval = std::numeric_limits<int>::min();
-	//else			bestEval = std::numeric_limits<int>::max();
+
+	//int moveCount = 0;
 
 	// Loop through moves
 	for (const Move& move : moves)
@@ -330,6 +319,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		engine->MakeMove(move);
 
 		if (engine->InCheck(movingColor)) { engine->UndoMove(); continue; }
+
 
 		bool opponentInCheck = engine->InCheck(Opponent(movingColor));
 
@@ -353,21 +343,18 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		{
 			if (!move.IsCapture(engine->GetBoard()) && (Pieces)move.promotion == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
 			{
-				//if (killerMoves[ply][0] != move)
-				//{
-				//	killerMoves[ply][1] = killerMoves[ply][0];
-				//	killerMoves[ply][0] = move;
-				//}
-
-				if (ply >= 3)
+				if (killerMoves[ply][0] != move)
 				{
-					int from = move.startRow * 8 + move.startCol;
-					int to = move.endRow * 8 + move.endCol;
-					Piece piece = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
-					int pieceType = (int)piece.GetType();
-
-					historyHeuristic[(int)piece.GetColor()][pieceType][from][to] += depth * depth;
+					killerMoves[ply][1] = killerMoves[ply][0];
+					killerMoves[ply][0] = move;
 				}
+
+				int from = move.startSquare;
+				int to = move.endSquare;
+				Piece movingPiece = engine->GetBoard()[from].GetPiece();
+				int pieceType = (int)movingPiece.GetType();
+
+				historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to] += depth * depth;
 			}
 			break;
 		}
@@ -409,7 +396,7 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 		return beta;
 	if (standPat > alpha)
 		alpha = standPat;
-
+	
 	Color movingColor = GameState::currentPlayer;
 
 	const int DELTA_MARGIN = 200; // Centipawns

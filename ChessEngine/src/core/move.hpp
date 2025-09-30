@@ -8,26 +8,23 @@
 
 struct Move
 {
-	Move(int startCol = 0, int startRow = 0, int endCol = 0, int endRow = 0, int promotion = 6,
-        bool wasEnPassant = false, bool wasCastle = false);
-	uint8_t startCol, startRow;
-	uint8_t endCol, endRow;
+	Move(int startSquare = 0, int endSquare = 0, int promotion = static_cast<int>(Pieces::NONE), bool wasEnPassant = false, bool wasCastle = false);
+	uint8_t startSquare;
+	uint8_t endSquare;
 	uint8_t promotion;     // Promotion piece, if any
-	bool wasEnPassant, wasCastle;
+    bool wasEnPassant : 1;
+    bool wasCastle : 1;
 
-	const char* ToString() const;
     const char* ToUCIString() const;
-    static Move FromUCI(const std::string& uci, const Square board[8][8]);
+    static Move FromUCI(const std::string& uci, const Square board[64]);
 	bool IsNull() const;
-    bool IsCapture(const Square board[8][8]) const;
+    bool IsCapture(const Square board[64]) const;
     bool operator==(const Move& other) const
     {
-        return startCol == other.startCol &&
-            startRow == other.startRow &&
-            endCol == other.endCol &&
-            endRow == other.endRow &&
-            promotion == other.promotion &&
-            wasEnPassant == other.wasEnPassant &&
-            wasCastle == other.wasCastle;
+        return startSquare == other.startSquare &&
+               endSquare == other.endSquare &&
+               promotion == other.promotion &&
+               wasEnPassant == other.wasEnPassant &&
+               wasCastle == other.wasCastle;
     }
 };

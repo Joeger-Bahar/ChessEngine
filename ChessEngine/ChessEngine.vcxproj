@@ -151,6 +151,7 @@
     <ClCompile Include="src\core\move.cpp" />
     <ClCompile Include="src\core\piece.cpp" />
     <ClCompile Include="src\core\square.cpp" />
+    <ClCompile Include="src\test.cpp" />
     <ClCompile Include="src\uci\uci.cpp" />
   </ItemGroup>
   <ItemGroup>

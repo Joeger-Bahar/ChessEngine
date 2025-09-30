@@ -44,10 +44,9 @@ void Uci::HandleCommand(const std::string& line)
         // Should probably clean this up
         GameState::currentPlayer = Color::WHITE;
         GameState::checkStatus = 0;
-        GameState::enPassantTarget[0] = -1;
-        GameState::enPassantTarget[1] = -1;
+        GameState::enPassantTarget = 0;
         GameState::halfmoves = 0;
-        GameState::endgameStatus = false;
+        GameState::endgame = false;
         GameState::checkmate = false;
         GameState::draw = false;
         GameState::invalidMove = false;
@@ -125,29 +124,31 @@ void Uci::HandleGo(std::istringstream& iss)
 Move Uci::ParseMove(const std::string& moveString)
 {
     Move move;
-    move.startCol = moveString[0] - 'a';
-    move.startRow = 8 - (moveString[1] - '0');
-    move.endCol = moveString[2] - 'a';
-    move.endRow = 8 - (moveString[3] - '0');
+
+    int startCol = moveString[0] - 'a';
+    int startRow = '8' - moveString[1];
+    int endCol = moveString[2] - 'a';
+    int endRow = '8' - moveString[3];
+
+    move.startSquare = ToIndex(startRow, startCol);
+    move.endSquare = ToIndex(endRow, endCol);
 
     if (moveString.length() == 5)
     {
         switch (moveString[4])
         {
-            case 'q': move.promotion = static_cast<int>(Pieces::QUEEN); break;
-            case 'r': move.promotion = static_cast<int>(Pieces::ROOK); break;
+            case 'q': move.promotion = static_cast<int>(Pieces::QUEEN);  break;
+            case 'r': move.promotion = static_cast<int>(Pieces::ROOK);   break;
             case 'b': move.promotion = static_cast<int>(Pieces::BISHOP); break;
             case 'n': move.promotion = static_cast<int>(Pieces::KNIGHT); break;
             default: move.promotion = 6; // None
         }
     }
     else
-    {
         move.promotion = 6; // None
-    }
 
-    Piece movingPiece = engine->GetBoard()[move.startRow][move.startCol].GetPiece();
-    if (movingPiece.GetType() == Pieces::KING && abs(move.startCol - move.endCol) == 2)
+    Piece movingPiece = engine->GetBoard()[move.startSquare].GetPiece();
+    if (movingPiece.GetType() == Pieces::KING && abs((move.startSquare % 8) - (move.endSquare % 8)) == 2)
     {
         move.wasCastle = true;
     }
@@ -157,8 +158,8 @@ Move Uci::ParseMove(const std::string& moveString)
     }
 
     if (movingPiece.GetType() == Pieces::PAWN &&
-        move.startCol != move.endCol &&
-        engine->GetBoard()[move.endRow][move.endCol].IsEmpty())
+        (move.startSquare % 8) != (move.endSquare % 8) &&
+        engine->GetBoard()[move.endSquare].IsEmpty())
     {
         move.wasEnPassant = true;
     }

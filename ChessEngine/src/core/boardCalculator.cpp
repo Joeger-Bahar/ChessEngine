@@ -17,84 +17,135 @@
 #include "engine.hpp"
 
 // Define offsets and directions
-const int BoardCalculator::knightOffsets[8][2] = {
-	{2, 1}, {1, 2}, {-1, 2}, {-2, 1},
-	{-2, -1}, {-1, -2}, {1, -2}, {2, -1}
+const int BoardCalculator::knightOffsets[8] = {
+	-17, -15, -10, -6,
+	  6,  10,  15, 17
 };
-const int BoardCalculator::kingOffsets[8][2] = {
-	{1, 0}, {1, 1}, {0, 1}, {-1, 1},
-	{-1, 0}, {-1, -1}, {0, -1}, {1, -1}
+const int BoardCalculator::kingOffsets[8] = {
+	-9, -8, -7,
+	-1,      1,
+	 7,  8,  9
 };
-const int BoardCalculator::bishopDirs[4][2] = { {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
-const int BoardCalculator::rookDirs[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
-const int BoardCalculator::queenDirs[8][2] = { {1 ,1}, {1, -1}, {-1, 1}, {-1, -1},
-											   {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
+const int BoardCalculator::bishopDirs[4] = {
+	-9,   -7,
+//	    b
+	7,	   9
+};
+const int BoardCalculator::rookDirs[4] = {
+		-8,
+	 -1,   1,
+		 8
+};
+const int BoardCalculator::queenDirs[8] = {
+	-9, -8, -7,
+	-1,      1,
+	 7,  8,  9
+};
 
-bool BoardCalculator::IsSquareAttacked(int row, int col, Color byColor, const Square board[8][8])
+bool BoardCalculator::IsSquareAttacked(int sq, Color byColor, const Square board[64])
 {
-	if (!InBounds(row, col) || byColor == Color::NONE)
+	if (!InBounds(sq) || byColor == Color::NONE)
 		return false;
+
+	int row = ToRow(sq);
+	int col = ToCol(sq);
 
 	// 1. Pawns
 	int pawnDir = IsWhite(byColor) ? 1 : -1;
-	if (InBounds(row + pawnDir, col - 1)) {
-		Piece p = board[row + pawnDir][col - 1].GetPiece();
+	// Up 1 row and across +1/-1 cols
+	int pawnLeft = sq + pawnDir * 8 - 1;
+	int pawnRight = sq + pawnDir * 8 + 1;
+
+	if (col > 0 && InBounds(pawnLeft))
+	{
+		Piece p = board[pawnLeft].GetPiece();
 		if (p.GetType() == Pieces::PAWN && p.GetColor() == byColor) return true;
 	}
-	if (InBounds(row + pawnDir, col + 1)) {
-		Piece p = board[row + pawnDir][col + 1].GetPiece();
+	if (col < 7 && InBounds(pawnRight))
+	{
+		Piece p = board[pawnRight].GetPiece();
 		if (p.GetType() == Pieces::PAWN && p.GetColor() == byColor) return true;
 	}
 
 	// 2. Knights
-	for (int i = 0; i < 8; ++i) {
-		int r = row + knightOffsets[i][0], c = col + knightOffsets[i][1];
-		if (InBounds(r, c)) {
-			Piece p = board[r][c].GetPiece();
-			if (p.GetType() == Pieces::KNIGHT && p.GetColor() == byColor) return true;
+	for (int i = 0; i < 8; ++i)
+	{
+		int target = sq + knightOffsets[i];
+		if (!InBounds(target)) continue;
+		if (std::abs(ToCol(target) - col) > 2) continue; // Prevent wraparoudn
+
+		Piece p = board[target].GetPiece();
+		if (p.GetType() == Pieces::KNIGHT && p.GetColor() == byColor) return true;
+	}
+
+	// 3. Straight sliding pieces (Rooks, Queens)
+	for (int d = 0; d < 4; ++d)
+	{
+		int dir = rookDirs[d];
+		int target = sq;
+
+		while (true)
+		{
+			int prevCol = ToCol(target);
+			target += dir;
+			if (!InBounds(target)) break;
+
+			// Prevent wrap across left/right
+			if (std::abs(ToCol(target) - prevCol) > 1) break;
+
+			Piece p = board[target].GetPiece();
+			if (p.GetType() == Pieces::NONE) continue;
+
+			if (p.GetColor() == byColor)
+				if (p.GetType() == Pieces::ROOK || (p.GetType() == Pieces::QUEEN))
+					return true;
+			break; // Blocked
 		}
 	}
-	
-	// 3. Sliding pieces (Rooks, Bishops, Queens)
-	for (int i = 0; i < 8; ++i) {
-		int dr = queenDirs[i][0], dc = queenDirs[i][1];
-		int r = row + dr, c = col + dc;
-		while (InBounds(r, c)) {
-			Piece p = board[r][c].GetPiece();
-			if (p.GetType() != Pieces::NONE) {
-				if (p.GetColor() == byColor) {
-					bool isDiagonal = (dr != 0 && dc != 0);
-					if (p.GetType() == Pieces::QUEEN || (p.GetType() == Pieces::BISHOP && isDiagonal) || (p.GetType() == Pieces::ROOK && !isDiagonal))
-						return true;
-				}
-				break; // Blocked
-			}
-			r += dr; c += dc;
+
+	// 4. Diagonal sliding pieces (Bishops, Queens)
+	for (int d = 0; d < 4; ++d)
+	{
+		int dir = bishopDirs[d];
+		int target = sq;
+
+		while (true)
+		{
+			int prevCol = ToCol(target);
+			target += dir;
+			if (!InBounds(target)) break;
+
+			// Prevent wrap across left/right
+			if (std::abs(ToCol(target) - prevCol) > 1) break;
+
+			Piece p = board[target].GetPiece();
+			if (p.GetType() == Pieces::NONE) continue;
+
+			if (p.GetColor() == byColor)
+				if (p.GetType() == Pieces::BISHOP || p.GetType() == Pieces::QUEEN)
+					return true;
+			break; // Blocked
 		}
 	}
 
 	// 4. King
-	for (int i = 0; i < 8; ++i) {
-		int r = row + kingOffsets[i][0], c = col + kingOffsets[i][1];
-		if (InBounds(r, c)) {
-			Piece p = board[r][c].GetPiece();
-			if (p.GetType() == Pieces::KING && p.GetColor() == byColor) return true;
-		}
+	for (int i = 0; i < 8; ++i)
+	{
+		int target = sq + kingOffsets[i];
+		if (!InBounds(target)) continue;
+		if (std::abs(ToCol(target) - col) > 1) continue; // Prevent wraparound
+
+		Piece p = board[target].GetPiece();
+		if (p.GetType() == Pieces::KING && p.GetColor() == byColor) return true;
 	}
 
 	return false; // No attackers found
 }
 
-
-bool BoardCalculator::InBounds(int row, int col)
-{
-	return row >= 0 && row < 8 && col >= 0 && col < 8;
-}
-
 // Bitboard
-std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Square board[8][8])
+std::vector<uint8_t> BoardCalculator::GetValidMoves(int sq, const Square board[64])
 {
-	Piece piece = board[row][col].GetPiece();
+	Piece piece = board[sq].GetPiece();
 	if (piece.GetType() == Pieces::NONE) return {}; // No piece to move
 
 	Color color = piece.GetColor();
@@ -103,22 +154,22 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 	switch (piece.GetType())
 	{
 	case Pieces::PAWN:
-		AddPawnMoves(row, col, color, moves, board);
+		AddPawnMoves(sq, color, moves, board);
 		break;
 	case Pieces::KNIGHT:
-		AddKnightMoves(row, col, color, moves, board);
+		AddKnightMoves(sq, color, moves, board);
 		break;
 	case Pieces::BISHOP:
-		AddSlidingMoves(row, col, color, moves, bishopDirs, 4, board);
+		AddSlidingMoves(sq, color, moves, bishopDirs, 4, board);
 		break;
 	case Pieces::ROOK:
-		AddSlidingMoves(row, col, color, moves, rookDirs, 4, board);
+		AddSlidingMoves(sq, color, moves, rookDirs, 4, board);
 		break;
 	case Pieces::QUEEN:
-		AddSlidingMoves(row, col, color, moves, queenDirs, 8, board);
+		AddSlidingMoves(sq, color, moves, queenDirs, 8, board);
 		break;
 	case Pieces::KING:
-		AddKingMoves(row, col, color, moves, board);
+		AddKingMoves(sq, color, moves, board);
 		break;
 	default:
 		return {};
@@ -126,69 +177,52 @@ std::vector<uint8_t> BoardCalculator::GetValidMoves(int row, int col, const Squa
 
 	// Now filter out moves that would put or leave the king in check
 	std::vector<uint8_t> validMoves;
-	Square tempBoard[8][8];
+	Square tempBoard[64];
 	memcpy(tempBoard, board, sizeof(Square) * 64);
 
 	// Find king position
-	int kingRow = -1, kingCol = -1;
-	for (int r = 0; r < 8; r++)
-	{
-		for (int c = 0; c < 8; c++)
-		{
-			Piece p = tempBoard[r][c].GetPiece();
-			if (p.GetType() == Pieces::KING && p.GetColor() == color)
-			{
-				kingRow = r; kingCol = c;
-				break;
-			}
-		}
-		if (kingRow != -1) break;
-	}
-
+	int kingSq = FindPiece(Piece(Pieces::KING, color), board);
+	
 	// Remove moves that put or leave king in check
-	for (int idx = 0; idx < 64; ++idx)
+	for (int endSq = 0; endSq < 64; ++endSq)
 	{
-		if (!moves[idx]) continue;
+		if (!moves[endSq]) continue;
+		
+		// Apply the move
+		Piece movingPiece = tempBoard[sq].GetPiece();
+		Piece capturedPiece = tempBoard[endSq].GetPiece();
+		tempBoard[endSq].SetPiece(movingPiece);
+		tempBoard[sq].SetPiece(Piece(Pieces::NONE, Color::NONE));
 
-		// Apply the move (row,col -> idx/8,idx%8)
-		int destRow = idx / 8;
-		int destCol = idx % 8;
-		Piece movingPiece = tempBoard[row][col].GetPiece();
-		Piece capturedPiece = tempBoard[destRow][destCol].GetPiece();
-		tempBoard[destRow][destCol].SetPiece(movingPiece);
-		tempBoard[row][col].SetPiece(Piece(Pieces::NONE, Color::NONE));
 		// En passant
 		if (movingPiece.type == Pieces::PAWN &&
-			destCol != col && capturedPiece.GetType() == Pieces::NONE)
+			ToCol(endSq) != ToCol(sq) && capturedPiece.GetType() == Pieces::NONE)
 		{
 			// Remove the pawn that was passed
-			int epRow = row;  // The pawn is on the same row as the moving pawn started
-			tempBoard[epRow][destCol].SetPiece(Piece(Pieces::NONE, Color::NONE));
+			int epRow = ToRow(sq);  // The pawn is on the same row as the moving pawn started
+			tempBoard[ToIndex(epRow, ToCol(endSq))].SetPiece(Piece(Pieces::NONE, Color::NONE));
 		}
 
 		// If the king moved, update its position for the check
-		int currentKingRow = kingRow;
-		int currentKingCol = kingCol;
 		if (movingPiece.type == Pieces::KING)
 		{
-			currentKingRow = destRow;
-			currentKingCol = destCol;
+			kingSq = endSq;
 		}
 
 		// Check if king is attacked
 		Color enemy = Opponent(color);
-		if (!IsSquareAttacked(currentKingRow, currentKingCol, enemy, tempBoard))
-			validMoves.push_back(idx); // Legal move
+		if (!IsSquareAttacked(kingSq, enemy, tempBoard))
+			validMoves.push_back(endSq); // Legal move
 
 		// Undo the move
-		tempBoard[row][col].SetPiece(movingPiece);
-		tempBoard[destRow][destCol].SetPiece(capturedPiece);
+		tempBoard[sq].SetPiece(movingPiece);
+		tempBoard[endSq].SetPiece(capturedPiece);
 	}
 
 	return validMoves;
 }
 
-std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square board[8][8], Engine* engine)
+std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square board[64], Engine* engine)
 {
 	std::vector<Move> moves;
 	GetAllMoves(moves, color, board, engine);
@@ -208,140 +242,128 @@ std::vector<Move> BoardCalculator::GetAllLegalMoves(Color color, const Square bo
 	return moves;
 }
 
-void BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const Square board[8][8], Engine* engine,
+void BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const Square board[64], Engine* engine,
 	bool onlyNoisy)
 {
 	moves.clear();
-	for (int i = 0; i < 8; ++i)
+	for (int sq = 0; sq < 64; ++sq)
 	{
-		for (int j = 0; j < 8; ++j)
+		Piece piece = board[sq].GetPiece();
+		if (piece.GetType() == Pieces::NONE || piece.GetColor() != color) continue; // No piece or wrong color
+
+		std::array<bool, 64> pieceMoves = { false };
+
+		// Generate moves for the piece
+		switch (piece.GetType())
 		{
-			Piece piece = board[i][j].GetPiece();
-			if (piece.GetType() == Pieces::NONE || piece.GetColor() != color) continue; // No piece or wrong color
+		case Pieces::PAWN:
+		{
+			AddPawnMoves(sq, color, pieceMoves, board);
 
-
-			std::array<bool, 64> pieceMoves = { false };
-
-			// Generate moves for the piece
-			switch (piece.GetType())
+			// Promotion
+			if ((color == Color::WHITE && ToRow(sq) == 1) ||
+				(color == Color::BLACK && ToRow(sq) == 6))
 			{
-			case Pieces::PAWN:
-			{
-				AddPawnMoves(i, j, color, pieceMoves, board);
-
-				// Promotion
-				if ((color == Color::WHITE && i == 1) ||
-					(color == Color::BLACK && i == 6))
+				for (int dc = -1; dc <= 1; ++dc)
 				{
 					int endRow = IsWhite(color) ? 0 : 7;
+					int endCol = ToCol(sq) + dc;
+					if (endCol < 0 || endCol >= 8) continue;
 
-					for (int dc = -1; dc <= 1; ++dc)
+					int endSq = ToIndex(endRow, endCol);
+					if (pieceMoves[endSq])
 					{
-						int endCol = j + dc;
-						if (endCol < 0 || endCol >= 8) continue;
-
-						int idx = endRow * 8 + endCol;
-						if (pieceMoves[idx])
+						for (Pieces promo : {Pieces::QUEEN, Pieces::ROOK, Pieces::BISHOP, Pieces::KNIGHT})
 						{
-							for (Pieces promo : {Pieces::QUEEN, Pieces::ROOK, Pieces::BISHOP, Pieces::KNIGHT})
-							{
-								Move move;
-								move.startRow = i;
-								move.startCol = j;
-								move.endRow = endRow;
-								move.endCol = endCol;
-								move.promotion = static_cast<int>(promo);
-								moves.push_back(move);
-							}
+							Move move;
+							move.startSquare = sq;
+							move.endSquare = endSq;
+							move.promotion = static_cast<int>(promo);
+							moves.push_back(move);
 						}
 					}
-					continue; // Skip default pawn move gen
 				}
-				break;
+				continue; // Skip default pawn move gen
 			}
-			case Pieces::KNIGHT:
-				AddKnightMoves(i, j, color, pieceMoves, board);
-				break;
-			case Pieces::BISHOP:
-				AddSlidingMoves(i, j, color, pieceMoves, bishopDirs, 4, board);
-				break;
-			case Pieces::ROOK:
-				AddSlidingMoves(i, j, color, pieceMoves, rookDirs, 4, board);
-				break;
-			case Pieces::QUEEN:
-				AddSlidingMoves(i, j, color, pieceMoves, queenDirs, 8, board);
-				break;
-			case Pieces::KING:
-				AddKingMoves(i, j, color, pieceMoves, board);
-				break;
-			}
+			break;
+		}
+		case Pieces::KNIGHT:
+			AddKnightMoves(sq, color, pieceMoves, board);
+			break;
+		case Pieces::BISHOP:
+			AddSlidingMoves(sq, color, pieceMoves, bishopDirs, 4, board);
+			break;
+		case Pieces::ROOK:
+			AddSlidingMoves(sq, color, pieceMoves, rookDirs, 4, board);
+			break;
+		case Pieces::QUEEN:
+			AddSlidingMoves(sq, color, pieceMoves, queenDirs, 8, board);
+			break;
+		case Pieces::KING:
+			AddKingMoves(sq, color, pieceMoves, board);
+			break;
+		}
 
-			// Convert pieceMoves to Move structs
-			for (int idx = 0; idx < 64; ++idx)
+		// Convert pieceMoves to Move structs
+		for (int endSq = 0; endSq < 64; ++endSq)
+		{
+			if (pieceMoves[endSq])
 			{
-				if (pieceMoves[idx])
+				Move move;
+				move.startSquare = sq;
+				move.endSquare = endSq;
+
+				const Piece movingPiece = board[move.startSquare].GetPiece();
+				const Piece targetPiece = board[move.endSquare].GetPiece();
+
+				// Castle
+				if (movingPiece.GetType() == Pieces::KING && abs(move.startSquare - move.endSquare) == 2)
+					move.wasCastle = true;
+
+				// En passant
+				if (movingPiece.GetType() == Pieces::PAWN && ToCol(move.startSquare) != ToCol(move.endSquare) &&
+					targetPiece.GetType() == Pieces::NONE)
+					move.wasEnPassant = true;
+
+				// Capture
+				if (onlyNoisy)
 				{
-					Move move;
-					move.startRow = i;
-					move.startCol = j;
-					move.endRow = idx / 8;
-					move.endCol = idx % 8;
-
-					const Piece movingPiece = board[move.startRow][move.startCol].GetPiece();
-					const Piece targetPiece = board[move.endRow][move.endCol].GetPiece();
-
-					// Castle
-					if (movingPiece.GetType() == Pieces::KING && abs(move.startCol - move.endCol) == 2)
-						move.wasCastle = true;
-
-					// En passant
-					if (movingPiece.GetType() == Pieces::PAWN && move.startCol != move.endCol &&
-						targetPiece.GetType() == Pieces::NONE)
-						move.wasEnPassant = true;
-
 					// Capture
-					if (onlyNoisy)
-					{
-						// Capture
-						if (move.IsCapture(board)) moves.push_back(move);
+					if (move.IsCapture(board)) moves.push_back(move);
 
-						// Promotions are added earlier
+					// Promotions are added earlier
 
-						// Checks
-						engine->MakeMove(move);
-						// Make move switches player so this is opponent
-						if (engine->InCheck(GameState::currentPlayer)) moves.push_back(move);
-						engine->UndoMove();
-					}
-					else
-						moves.push_back(move);
+					// Checks
+					engine->MakeMove(move);
+					// Make move switches player so this is opponent
+					if (engine->InCheck(GameState::currentPlayer)) moves.push_back(move);
+					engine->UndoMove();
 				}
+				else
+					moves.push_back(move);
 			}
 		}
 	}
 }
 
-std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[8][8], Engine* engine, bool onlyCaptures)
+std::vector<Move> BoardCalculator::GetAllMoves(Color color, const Square board[64], Engine* engine, bool onlyCaptures)
 {
 	std::vector<Move> moves;
 	GetAllMoves(moves, color, board, engine, onlyCaptures);
 	return moves;
 }
 
-uint8_t BoardCalculator::FindPiece(Piece piece, const Square board[8][8])
+uint8_t BoardCalculator::FindPiece(Piece piece, const Square board[64])
 {
-	for (int r = 0; r < 8; r++)
+	for (int sq = 0; sq < 64; sq++)
 	{
-		for (int c = 0; c < 8; c++)
-		{
-			if (board[r][c].GetPiece() == piece)
-				return r * 8 + c;
-		}
+		if (board[sq].GetPiece() == piece)
+			return sq;
 	}
 	return 64; // Not found
 }
 
-bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
+bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[64])
 {
 	Color player = GameState::currentPlayer;
 	Color enemy = Opponent(player);
@@ -353,7 +375,7 @@ bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
 		return false;
 
 	// 2. King is in check
-	if (IsSquareAttacked(row, 4, enemy, board))
+	if (IsSquareAttacked(ToIndex(row, 4), enemy, board))
 		return false;
 
 	int kingColumn = 4;
@@ -363,7 +385,7 @@ bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
 	int squaresToMove = kingside ? 2 : 3;
 	for (int i = 1; i <= squaresToMove; ++i)
 	{
-		if (!board[row][kingColumn + (step * i)].IsEmpty())
+		if (!board[ToIndex(row, kingColumn + (step * i))].IsEmpty())
 		{
 			return false;
 		}
@@ -373,7 +395,7 @@ bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
 	int squaresToMoveThrough = 2;
 	for (int i = 1; i <= squaresToMoveThrough; ++i)
 	{
-		if (IsSquareAttacked(row, kingColumn + (step * i), enemy, board))
+		if (IsSquareAttacked(ToIndex(row, kingColumn + (step * i)), enemy, board))
 			return false;
 	}
 
@@ -381,55 +403,53 @@ bool BoardCalculator::IsCastlingValid(bool kingside, const Square board[8][8])
 }
 
 
-void BoardCalculator::AddKingMoves(int row, int col, Color color, std::array<bool, 64>& moves, const Square board[8][8])
+void BoardCalculator::AddKingMoves(int sq, Color color, std::array<bool, 64>& moves, const Square board[64])
 {
+	int row = ToRow(sq);
+	int col = ToCol(sq);
+
 	for (int i = 0; i < 8; ++i)
 	{
-		int nr = row + kingOffsets[i][0];
-		int nc = col + kingOffsets[i][1];
-		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8)
+		int target = sq + kingOffsets[i];
+
+		if (!InBounds(target)) continue;
+		if (std::abs(ToCol(target) - col) > 1) continue; // Prevent wraparound
+		
+		Piece targetPiece = board[target].GetPiece();
+		if (targetPiece.GetType() == Pieces::NONE || targetPiece.GetColor() != color)
 		{
-			Piece target = board[nr][nc].GetPiece();
-			if (target.GetType() == Pieces::NONE || target.GetColor() != color)
-			{
-				// Check for moving into check
-				if (!IsSquareAttacked(nr, nc, Opponent(color), board))
-					moves[nr * 8 + nc] = true;
-			}
+			// Check for moving into check
+			if (!IsSquareAttacked(target, Opponent(color), board))
+				moves[target] = true;
 		}
 	}
 
 	// Castling
 	if (IsCastlingValid(true, board)) // Kingside
-	{
-		int castlingCol = col + 2;
-		moves[row * 8 + castlingCol] = true;
-	}
+		moves[ToIndex(row, col + 2)] = true;
 	if (IsCastlingValid(false, board)) // Queenside
-	{
-		int castlingCol = col - 2;
-		moves[row * 8 + castlingCol] = true;
-	}
+		moves[ToIndex(row, col - 2)] = true;
 }
 
-void BoardCalculator::AddPawnMoves(int row, int col, Color color, std::array<bool, 64>& moves, const Square board[8][8])
+void BoardCalculator::AddPawnMoves(int sq, Color color, std::array<bool, 64>& moves, const Square board[64])
 {
+	int row = ToRow(sq);
+	int col = ToCol(sq);
 	int dir = IsWhite(color) ? -1 : 1;  // White pawns move "up" (row decreases), black "down" (row increases)
 
 	// One square forward
-	int nr = row + dir;
-	if (0 <= nr && nr < 8 && board[nr][col].GetPiece().GetType() == Pieces::NONE)
+	int oneForward = ToIndex(row + dir, col);
+
+	if (InBounds(oneForward) && board[oneForward].GetPiece().GetType() == Pieces::NONE)
 	{
-		moves[nr * 8 + col] = true;
+		moves[oneForward] = true;
+
 		// Two squares forward from starting position
-		if ((color == Color::WHITE && row == 6) || (color == Color::BLACK && row == 1))
+		if ((IsWhite(color) && row == 6) || (IsBlack(color) && row == 1))
 		{
-			int nnr = row + 2 * dir;
-			if (0 <= nnr && nnr < 8 && board[nnr][col].GetPiece().GetType() == Pieces::NONE)
-			{
-				//std::cout << "added pawn move\n";
-				moves[nnr * 8 + col] = true;
-			}
+			int twoForward = ToIndex(row + 2 * dir, col);
+			if (InBounds(twoForward) && board[twoForward].GetPiece().GetType() == Pieces::NONE)
+				moves[twoForward] = true;
 		}
 	}
 
@@ -437,156 +457,66 @@ void BoardCalculator::AddPawnMoves(int row, int col, Color color, std::array<boo
 	for (int dc : {-1, 1})
 	{
 		int nc = col + dc;
-		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8)
-		{
-			Piece target = board[nr][nc].GetPiece();
-			if (target.GetType() != Pieces::NONE && target.GetColor() != color)
-			{
-				moves[nr * 8 + nc] = true;
-			}
-		}
+		if (nc < 0 || nc > 7) continue;
+		int target = ToIndex(row + dir, nc);
+		if (!InBounds(target)) continue;
+
+		Piece targetPieces = board[target].GetPiece();
+		if (targetPieces.GetType() != Pieces::NONE && targetPieces.GetColor() != color)
+			moves[target] = true;
 	}
 
 	// En passant
-	if (GameState::enPassantTarget[0] == nr && abs(GameState::enPassantTarget[1] - col) == 1)
+	if (GameState::enPassantTarget != -1)
 	{
-		int epCol = GameState::enPassantTarget[1];
-		moves[nr * 8 + epCol] = true;
+		int epSq = GameState::enPassantTarget;
+		if (ToRow(epSq) == row + dir && std::abs(ToCol(epSq) - col) == 1)
+			moves[epSq] = true;
 	}
 }
 
-void BoardCalculator::AddKnightMoves(int row, int col, Color color, std::array<bool, 64>& moves, const Square board[8][8])
+void BoardCalculator::AddKnightMoves(int sq, Color color, std::array<bool, 64>& moves, const Square board[64])
 {
-	for (int i = 0; i < 8; ++i) {
-		int nr = row + knightOffsets[i][0], nc = col + knightOffsets[i][1];
-		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8) {
-			Piece target = board[nr][nc].GetPiece();
-			if (target.GetType() == Pieces::NONE || target.GetColor() != color) {
-				moves[nr * 8 + nc] = true;
+	int col = ToCol(sq);
+
+	for (int i = 0; i < 8; ++i)
+	{
+		int target = sq + knightOffsets[i];
+		if (!InBounds(target)) continue;
+		if (std::abs(ToCol(target) - col) > 2) continue; // Prevent wraparound
+
+		Piece targetPiece = board[target].GetPiece();
+		if (targetPiece.GetType() == Pieces::NONE || targetPiece.GetColor() != color)
+			moves[target] = true;
+	}
+}
+
+void BoardCalculator::AddSlidingMoves(int sq, Color color, std::array<bool, 64>& moves, const int dirs[], int numDirs, const Square board[64])
+{
+	for (int i = 0; i < numDirs; ++i)
+	{
+		int dir = dirs[i];
+		int target = sq;
+
+		while (true)
+		{
+			int prevCol = ToCol(target);
+			target += dir;
+			if (!InBounds(target)) break;
+			if (std::abs(ToCol(target) - prevCol) > 1 &&
+				(dir == -1 || dir == 1 || dir == -9 || dir == 7 || dir == -7 || dir == 9)) break; // TODO: Could be wrong detection
+
+			Piece targetPiece = board[target].GetPiece();
+			if (targetPiece.GetType() == Pieces::NONE)
+			{
+				moves[target] = true;
+				continue;
 			}
+
+			if (targetPiece.GetColor() != color)
+				moves[target] = true;
+			
+			break; // Blocked
 		}
 	}
 }
-
-void BoardCalculator::AddSlidingMoves(int row, int col, Color color, std::array<bool, 64>& moves, const int dirs[][2], int numDirs, const Square board[8][8])
-{
-	for (int i = 0; i < numDirs; ++i) {
-		int dr = dirs[i][0], dc = dirs[i][1];
-		int nr = row + dr, nc = col + dc;
-		while (0 <= nr && nr < 8 && 0 <= nc && nc < 8) {
-			Piece target = board[nr][nc].GetPiece();
-			if (target.GetType() == Pieces::NONE) {
-				moves[nr * 8 + nc] = true;
-			}
-			else {
-				if (target.GetColor() != color) {
-					moves[nr * 8 + nc] = true;
-				}
-				break; // Blocked
-			}
-			nr += dr; nc += dc;
-		}
-	}
-}
-
-//void BoardCalculator::AddKnightAttacks(int row, int col, std::array<bool, 64>& attacked)
-//{
-//	for (int i = 0; i < 8; ++i) {
-//		int nr = row + knightOffsets[i][0], nc = col + knightOffsets[i][1];
-//		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8)
-//			attacked[nr * 8 + nc] = true;
-//	}
-//}
-//
-//void BoardCalculator::AddSlidingAttacks(int row, int col, std::array<bool, 64>& attacked, const int dirs[][2], int numDirs,
-//	const Square board[8][8])
-//{
-//	for (int i = 0; i < numDirs; ++i) {
-//		int dr = dirs[i][0], dc = dirs[i][1];
-//		int nr = row + dr, nc = col + dc;
-//		while (0 <= nr && nr < 8 && 0 <= nc && nc < 8) {
-//			attacked[nr * 8 + nc] = true;
-//			if (board[nr][nc].GetPiece() != Pieces::NONE) break; // Blocked
-//			nr += dr; nc += dc;
-//		}
-//	}
-//}
-//
-//void BoardCalculator::AddPawnAttacks(int row, int col, Color color, std::array<bool, 64>& attacked)
-//{
-//	int dir = (color == Color::WHITE) ? -1 : 1;  // White pawns move "up" (row decreases), black "down" (row increases)
-//
-//	// Two attack directions: left diagonal and right diagonal
-//	for (int dc : {-1, 1})
-//	{
-//		int nr = row + dir;
-//		int nc = col + dc;
-//
-//		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8)
-//			attacked[nr * 8 + nc] = true;
-//	}
-//}
-
-//void BoardCalculator::AddKingAttacks(int row, int col, std::array<bool, 64>& attacked)
-//{
-//	for (int i = 0; i < 8; ++i)
-//	{
-//		int nr = row + kingOffsets[i][0];
-//		int nc = col + kingOffsets[i][1];
-//
-//		if (0 <= nr && nr < 8 && 0 <= nc && nc < 8)
-//			attacked[nr * 8 + nc] = true;
-//	}
-//}
-
-//std::vector<uint8_t> BoardCalculator::GetAttackedSquares(Color color, const Square board[8][8])
-//{
-//	// Attacked can be used as a bitboard for attacked squares
-//	std::array<bool, 64> attacked = { false };
-//
-//	for (int i = 0; i < 8; ++i)
-//	{
-//		for (int j = 0; j < 8; ++j)
-//		{
-//			Piece piece = board[i][j].GetPiece();
-//			if (piece == Pieces::NONE || piece.GetColor() != color) continue;
-//
-//			switch (piece)
-//			{
-//			case Pieces::PAWN:
-//				AddPawnAttacks(i, j, color, attacked);
-//				break;
-//			case Pieces::KNIGHT:
-//				AddKnightAttacks(i, j, attacked);
-//				break;
-//			case Pieces::BISHOP:
-//				AddSlidingAttacks(i, j, attacked, bishopDirs, 4, board);
-//				break;
-//			case Pieces::ROOK:
-//				AddSlidingAttacks(i, j, attacked, rookDirs, 4, board);
-//				break;
-//			case Pieces::QUEEN:
-//				AddSlidingAttacks(i, j, attacked, queenDirs, 8, board);
-//				break;
-//			case Pieces::KING:
-//				AddKingAttacks(i, j, attacked);
-//				break;
-//			}
-//		}
-//	}
-//
-//	std::vector<uint8_t> attackedSquares;
-//	for (int idx = 0; idx < 64; ++idx)
-//	{
-//		if (attacked[idx])
-//		{
-//			int row = idx / 8;
-//			int col = idx % 8;
-//			Piece targetPiece = board[row][col].GetPiece();
-//			if (targetPiece == Pieces::NONE || targetPiece.GetColor() != color)
-//				attackedSquares.push_back(idx);
-//		}
-//	}
-//
-//	return attackedSquares;
-//}
