@@ -862,6 +862,64 @@ void Engine::UndoMove()
 	currentPlayer = player;
 }
 
+void Engine::MakeNullMove()
+{
+	// Append undo info
+	BoardState state;
+	state.movedPiece    = static_cast<uint8_t>(Pieces::NONE);
+	state.capturedPiece = static_cast<uint8_t>(Pieces::NONE);
+	AppendUndoList(state, Move());
+
+	// Clear en passant and castling
+	if (enPassantTarget != -1)
+		zobristKey ^= zobrist.enPassantFile[ToCol(enPassantTarget)];
+	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
+	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
+	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
+	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
+	enPassantTarget = -1;
+
+	halfmoves++;
+
+	if (halfmoves >= 50) { draw = true; }
+
+	ChangePlayers();
+	if (IsWhite(currentPlayer))
+		zobristKey ^= zobrist.sideToMove;
+
+	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
+	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];
+	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
+	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
+
+	positionStack.push_back(zobristKey);
+	positionCounts[zobristKey] += 1;
+
+}
+
+void Engine::UndoNullMove()
+{
+	BoardState lastState = undoHistory.back();
+	undoHistory.pop_back();
+
+	positionCounts[zobristKey] -= 1;
+	positionStack.pop_back();
+
+	ChangePlayers();
+	if (IsWhite(currentPlayer))
+		zobristKey ^= zobrist.sideToMove;
+
+	enPassantTarget = lastState.enPassantTarget;
+	whiteCastlingRights[0] = (lastState.castlingRights & 0b1000) != 0;
+	whiteCastlingRights[1] = (lastState.castlingRights & 0b0100) != 0;
+	blackCastlingRights[0] = (lastState.castlingRights & 0b0010) != 0;
+	blackCastlingRights[1] = (lastState.castlingRights & 0b0001) != 0;
+	halfmoves = lastState.halfmoveClock;
+	draw = false;
+
+	zobristKey = lastState.zobristKey; // restore full hash
+}
+
 void Engine::UndoTurn()
 {
 	UndoMove();

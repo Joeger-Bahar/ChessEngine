@@ -29,6 +29,8 @@ public:
 
 	void MakeMove(const Move move);
 	void UndoMove();
+	void MakeNullMove();
+	void UndoNullMove();
 	void UndoTurn();
 
 	void SetBot(Bot* bot);

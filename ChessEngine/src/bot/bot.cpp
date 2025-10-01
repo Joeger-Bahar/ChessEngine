@@ -290,6 +290,21 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	Color movingColor = GameState::currentPlayer;
 	bool foundLegal = false;
 
+	// Null move reduction
+	if (depth >= 3 && !engine->InCheck(movingColor) && !GameState::endgame)
+	{
+		int reduction = 2;
+		engine->MakeNullMove();
+		int nullScore = -Search(depth - 1 - reduction, ply + 1, -beta, -beta + 1);
+		engine->UndoNullMove();
+
+		if (quitEarly) return 0;
+
+		if (nullScore >= beta) {
+			return beta; // Fail-hard beta cutoff
+		}
+	}
+
 	std::vector<Move>& moves = moveLists[ply];
 	BoardCalculator::GetAllMoves(moves, movingColor, engine->GetBoard(), engine);
 	OrderMoves(moves, ply, false);
@@ -311,7 +326,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	int bestEval = -INF;
 
-	//int moveCount = 0;
+	int moveCount = 0;
 
 	// Loop through moves
 	for (const Move& move : moves)
@@ -320,12 +335,34 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		if (engine->InCheck(movingColor)) { engine->UndoMove(); continue; }
 
+		++moveCount;
 
 		bool opponentInCheck = engine->InCheck(Opponent(movingColor));
 
 		foundLegal = true;
 
-		int eval = -Search(depth - 1, ply + 1, -beta, -alpha);
+		int newDepth = depth - 1;
+		int eval;
+
+		// Late Move Reduction
+		if (depth >= 3 && moveCount > 4
+			&& !move.IsCapture(engine->GetBoard())
+			&& !opponentInCheck)
+		{
+			int reduction = 1;
+
+			int reduced = -Search(newDepth - reduction, ply + 1, -alpha - 1, -alpha);
+
+			if (reduced > alpha) // Move is actually good
+			{
+				// Research at full depth
+				eval = -Search(newDepth, ply + 1, -beta, -alpha);
+			}
+			else
+				eval = reduced;
+		}
+		else // Normal search
+			eval = -Search(newDepth, ply + 1, -beta, -alpha);
 
 		engine->UndoMove();
 

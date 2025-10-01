@@ -1,6 +1,6 @@
 #include "eval.hpp"
 
-// White pawns (ranks from White's perspective)
+// Pawns
 int pawnPST[64] = {
 	 0,  0,  0,  0,  0,  0,  0,  0,
 	50, 50, 50, 50, 50, 50, 50, 50,
@@ -12,19 +12,7 @@ int pawnPST[64] = {
 	 0,  0,  0,  0,  0,  0,  0,  0
 };
 
-//// Black pawns (mirrored)
-//int pawnPST_black[64] = {
-//	 0,  0,  0,  0,  0,  0,  0,  0,
-//	 5, 10, 10,-20,-20, 10, 10,  5,
-//	 5, -5,-10,  0,  0,-10, -5,  5,
-//	 0,  0,  0, 20, 20,  0,  0,  0,
-//	 5,  5, 10, 25, 25, 10,  5,  5,
-//	10, 10, 20, 30, 30, 20, 10, 10,
-//	50, 50, 50, 50, 50, 50, 50, 50,
-//	 0,  0,  0,  0,  0,  0,  0,  0
-//};
-
-// White king, middle game (mirrored)
+// King, middle game
 int kingPST_mg[64] = {
    -30,-40,-40,-50,-50,-40,-40,-30,
    -30,-40,-40,-50,-50,-40,-40,-30,
@@ -36,19 +24,7 @@ int kingPST_mg[64] = {
 	20, 30, 10,  0,  0, 10, 30, 20
 };
 
-//// Black king, middle game
-//int kingPST_mg_black[64] = {
-//	20, 30, 10,  0,  0, 10, 30, 20,
-//	20, 20,  0,  0,  0,  0, 20, 20,
-//   -10,-20,-20,-20,-20,-20,-20,-10,
-//   -20,-30,-30,-40,-40,-30,-30,-20,
-//   -30,-40,-40,-50,-50,-40,-40,-30,
-//   -30,-40,-40,-50,-50,-40,-40,-30,
-//   -30,-40,-40,-50,-50,-40,-40,-30,
-//   -30,-40,-40,-50,-50,-40,-40,-30
-//};
-
-// White king, endgame (mirrored)
+// King, endgame
 int kingPST_eg[64] = {
    -50,-40,-30,-20,-20,-30,-40,-50,
    -30,-20,-10,  0,  0,-10,-20,-30,
@@ -59,18 +35,6 @@ int kingPST_eg[64] = {
    -30,-30,  0,  0,  0,  0,-30,-30,
    -50,-30,-30,-30,-30,-30,-30,-50
 };
-
-//// Black king, endgame
-//int kingPST_eg_black[64] = {
-//   -50,-30,-30,-30,-30,-30,-30,-50,
-//   -30,-30,  0,  0,  0,  0,-30,-30,
-//   -30,-10, 20, 30, 30, 20,-10,-30,
-//   -30,-10, 30, 40, 40, 30,-10,-30,
-//   -30,-10, 30, 40, 40, 30,-10,-30,
-//   -30,-10, 20, 30, 30, 20,-10,-30,
-//   -30,-20,-10,  0,  0,-10,-20,-30,
-//   -50,-40,-30,-20,-20,-30,-40,-50
-//};
 
 // Knight PST
 int knightPST[64] = {
@@ -230,50 +194,6 @@ int Eval(Color player, const Square board[64])
 		default:
 			break;
 		}
-		//else // Black piece
-		//{
-		//	score -= value;
-
-		//	switch (piece.GetType())
-		//	{
-		//	case Pieces::PAWN:
-		//		score -= pawnPST_black[sq];
-		//		blackPawns++;
-		//		break;
-		//	case Pieces::KNIGHT:
-		//		score -= knightPST[Mirror(sq)];
-		//		blackKnights++;
-		//		break;
-		//	case Pieces::BISHOP:
-		//		score -= bishopPST[Mirror(sq)];
-		//		blackBishops++;
-		//		break;
-		//	case Pieces::ROOK:
-		//		score -= rookPST[Mirror(sq)];
-		//		blackRooks++;
-		//		break;
-		//	case Pieces::QUEEN:
-		//		score -= queenPST[Mirror(sq)];
-		//		blackQueens++;
-		//		break;
-		//	case Pieces::KING:
-		//		if (!GameState::endgame)
-		//			score -= kingPST_mg_black[sq];
-		//		else
-		//			score -= kingPST_eg_black[sq];
-		//		break;
-		//	default:
-		//		break;
-		//	}
-		//}
-	}
-
-	// Pawn capture penalties to knights
-	//int whitePawnsCaptured = 8 - whitePawns;
-	//int blackPawnsCaptured = 8 - blackPawns;
-
-	//score -= whiteKnights * (whitePawnsCaptured * 10);
-	//score += blackKnights * (blackPawnsCaptured * 10);
 
 	if (player == Color::BLACK) score *= -1;
 
