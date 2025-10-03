@@ -6,25 +6,24 @@
 #include <cstdint>
 #include <string>
 
-struct Move
-{
-	Move(int startSquare = 0, int endSquare = 0, int promotion = static_cast<int>(Pieces::NONE), bool wasEnPassant = false, bool wasCastle = false);
-	uint8_t startSquare;
-	uint8_t endSquare;
-	uint8_t promotion;     // Promotion piece, if any
-    bool wasEnPassant : 1;
-    bool wasCastle : 1;
+using Move = uint32_t;
 
-    const char* ToUCIString() const;
-    static Move FromUCI(const std::string& uci, const Square board[64]);
-	bool IsNull() const;
-    bool IsCapture(const Square board[64]) const;
-    bool operator==(const Move& other) const
-    {
-        return startSquare == other.startSquare &&
-               endSquare == other.endSquare &&
-               promotion == other.promotion &&
-               wasEnPassant == other.wasEnPassant &&
-               wasCastle == other.wasCastle;
-    }
-};
+inline Move EncodeMove(int start, int end, int promotion = static_cast<int>(Pieces::NONE), bool enPassant = false, bool castle = false)
+{
+    return (start & 0x3F) |
+        ((end & 0x3F) << 6) |
+        ((promotion & 0x7) << 12) |
+        ((enPassant ? 1 : 0) << 15) |
+        ((castle ? 1 : 0) << 16);
+}
+
+inline int  GetStart(Move m)       { return m         & 0x3F; }
+inline int  GetEnd(Move m)         { return (m >> 6)  & 0x3F; }
+inline int  GetPromotion(Move m)   { return (m >> 12) & 0x7; }
+inline bool IsEnPassant(Move m)    { return (m >> 15) & 1; }
+inline bool IsCastle(Move m)       { return (m >> 16) & 1; }
+
+const char* MoveToUCI(Move m);
+Move MoveFromUCI(const std::string& uci, const Square board[64]);
+bool MoveIsNull(Move m);
+bool MoveIsCapture(Move m, const Square board[64]);

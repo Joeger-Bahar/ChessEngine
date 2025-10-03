@@ -275,11 +275,7 @@ void BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const S
 					{
 						for (Pieces promo : {Pieces::QUEEN, Pieces::ROOK, Pieces::BISHOP, Pieces::KNIGHT})
 						{
-							Move move;
-							move.startSquare = sq;
-							move.endSquare = endSq;
-							move.promotion = static_cast<int>(promo);
-							moves.push_back(move);
+							moves.push_back(EncodeMove(sq, endSq, static_cast<int>(promo)));
 						}
 					}
 				}
@@ -309,27 +305,30 @@ void BoardCalculator::GetAllMoves(std::vector<Move>& moves, Color color, const S
 		{
 			if (pieceMoves[endSq])
 			{
-				Move move;
-				move.startSquare = sq;
-				move.endSquare = endSq;
+				int startSquare = sq;
+				int endSquare = endSq;
+				bool isCastle = false;
+				bool isEnPassant = false;
 
-				const Piece movingPiece = board[move.startSquare].GetPiece();
-				const Piece targetPiece = board[move.endSquare].GetPiece();
+				const Piece movingPiece = board[startSquare].GetPiece();
+				const Piece targetPiece = board[endSquare].GetPiece();
 
 				// Castle
-				if (movingPiece.GetType() == Pieces::KING && abs(move.startSquare - move.endSquare) == 2)
-					move.wasCastle = true;
+				if (movingPiece.GetType() == Pieces::KING && abs(startSquare - endSquare) == 2)
+					isCastle = true;
 
 				// En passant
-				if (movingPiece.GetType() == Pieces::PAWN && ToCol(move.startSquare) != ToCol(move.endSquare) &&
+				if (movingPiece.GetType() == Pieces::PAWN && ToCol(startSquare) != ToCol(endSquare) &&
 					targetPiece.GetType() == Pieces::NONE)
-					move.wasEnPassant = true;
+					isEnPassant = true;
+
+				Move move = EncodeMove(startSquare, endSquare, static_cast<int>(Pieces::NONE), isEnPassant, isCastle);
 
 				// Capture
 				if (onlyNoisy)
 				{
 					// Capture
-					if (move.IsCapture(board)) moves.push_back(move);
+					if (MoveIsCapture(move, board)) moves.push_back(move);
 
 					// Promotions are added earlier
 

@@ -157,6 +157,7 @@
   <ItemGroup>
     <ClInclude Include="src\bot\bot.hpp" />
     <ClInclude Include="src\bot\opening.hpp" />
+    <ClInclude Include="src\core\bitboard.hpp" />
     <ClInclude Include="src\core\boardCalculator.hpp" />
     <ClInclude Include="src\core\engine.hpp" />
     <ClInclude Include="src\core\eval.hpp" />

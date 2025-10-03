@@ -108,7 +108,7 @@ int Eval(Color player, const Square board[64])
 		Piece piece = board[sq].GetPiece();
 		if (piece.GetType() == Pieces::NONE) continue;
 
-		int value = pieceValues[static_cast<int>(piece.GetType()) + 1];
+		int value = pieceValues[static_cast<int>(piece.GetType())];
 		bool isWhite = IsWhite(piece.GetColor());
 
 		if (isWhite)
@@ -194,6 +194,7 @@ int Eval(Color player, const Square board[64])
 		default:
 			break;
 		}
+	}
 
 	if (player == Color::BLACK) score *= -1;
 

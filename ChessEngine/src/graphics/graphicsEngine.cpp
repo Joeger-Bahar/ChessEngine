@@ -83,6 +83,19 @@ void GraphicsEngine::RenderPieces(Square board[64])
 	}
 }
 
+void GraphicsEngine::RenderBitboard(uint64_t bitboard)
+{
+	// Queu bitboard rects for debugging (blue = 1, red = 0)
+	for (int sq = 0; sq < 64; ++sq)
+	{
+		// Queue a rect for each square in the bitboard
+		if (bitboard & (1ULL << sq))
+			QueueRender([this, sq]() { DrawSquareHighlight(sq, { 0, 0, 255, 100 }); }); // Blue for 1
+		else
+			QueueRender([this, sq]() { DrawSquareHighlight(sq, { 255, 0, 0, 100 }); }); // Red for 0
+	}
+}
+
 int GraphicsEngine::GetInputs()
 {
 	SDL_Event event;

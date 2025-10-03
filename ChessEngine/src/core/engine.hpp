@@ -12,6 +12,7 @@
 #include "zobrist.hpp"
 
 #include "graphics/graphicsEngine.hpp"
+#include "bitboard.hpp"
 
 class Bot;
 
@@ -56,6 +57,9 @@ private:
 	bool StoreMove(Move& move);   // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move
 
+	//void RemoveFromBitboards(const Piece& p, int sq);
+	//void AddToBitboards(const Piece& p, int sq);
+
 	void UpdateEndgameStatus();
 	void UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece);
 	void UpdateEnPassantSquare(const Move move);
@@ -65,6 +69,8 @@ private:
 
 	Square board[64];
 	GraphicsEngine graphics;
+
+	BitboardBoard bitboards;
 
 	Zobrist zobrist;
 	uint64_t zobristKey = 0;

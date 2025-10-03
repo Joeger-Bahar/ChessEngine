@@ -16,28 +16,6 @@ using namespace std::chrono;
 constexpr int INF = std::numeric_limits<int>::max() / 4;
 constexpr int MATE_VAL = 1000000;
 
-uint32_t PackMove(const Move& m)
-{
-	uint32_t s = m.startSquare;
-	uint32_t t = m.endSquare;
-	// TODO: This is an incorrect packing of promotion
-	uint32_t promo = (m.promotion ? (m.promotion & 0x7) : 0); // user-defined
-	return (s) | (t << 6) | (promo << 12) | ((m.wasEnPassant ? 1u : 0u) << 15) | ((m.wasCastle ? 1u : 0u) << 16);
-}
-
-Move UnpackMove(uint32_t code)
-{
-	Move m;
-	uint32_t s = code & 0x3F;
-	uint32_t t = (code >> 6) & 0x3F;
-	m.startSquare = s;
-	m.endSquare = t;
-	m.promotion = (uint8_t)((code >> 12) & 0x7);
-	m.wasEnPassant = ((code >> 15) & 1);
-	m.wasCastle = ((code >> 16) & 1);
-	return m;
-}
-
 Bot::Bot(Engine* engine, Color color)
 {
 	this->engine = engine;
@@ -67,8 +45,8 @@ const int killerBonus = 500000;
 
 int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 {
-	Piece moved = engine->GetBoard()[move.startSquare].GetPiece();
-	Piece captured = engine->GetBoard()[move.endSquare].GetPiece();
+	Piece moved    = engine->GetBoard()[GetStart(move)].GetPiece();
+	Piece captured = engine->GetBoard()[GetEnd(move)].GetPiece();
 
 	// MVV-LVA: Most Valuable Victim - Least Valuable Attacker
 	if (captured.GetType() != Pieces::NONE)
@@ -78,7 +56,7 @@ int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 	if (move == killerMoves[ply][0]) return killerBonus;
 	else if (move == killerMoves[ply][1]) return killerBonus - 100;
 
-	return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType()][move.startSquare][move.endSquare];
+	return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType() - 1][GetStart(move)][GetEnd(move)];
 }
 
 // Orders moves in-place, best first
@@ -89,7 +67,7 @@ void Bot::OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move fi
 			return ScoreMove(a, ply, onlyMVVLVA) > ScoreMove(b, ply, onlyMVVLVA);
 		});
 
-	if (!firstMove.IsNull())
+	if (!MoveIsNull(firstMove))
 	{
 		// Insert at front
 		moves.insert(moves.begin(), firstMove);
@@ -134,7 +112,7 @@ Move Bot::GetMoveUCI(int wtime, int btime)
 Move Bot::GetMove()
 {
 	Move bookMove = GetBookMove(engine, "res/openings.bin");
-	if (!bookMove.IsNull())
+	if (!MoveIsNull(bookMove))
 	{
 		std::cout << "Using opening move\n";
 		return bookMove; // Play instantly
@@ -160,6 +138,7 @@ Move Bot::GetMove()
 
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
+		std::cout << "Depth: " << depth << '\n';
 		int alpha = -INF;
 		int beta = INF;
 		bool foundLegal = false;
@@ -168,7 +147,7 @@ Move Bot::GetMove()
 		int currentBestScore = -INF;
 
 		std::vector<Move> moves = BoardCalculator::GetAllMoves(botColor, engine->GetBoard(), engine);
-		if (!bestMove.IsNull()) // Current best move first to help with pruning
+		if (!MoveIsNull(bestMove)) // Current best move first to help with pruning
 			OrderMoves(moves, 0, false, bestMove);
 		else
 		{
@@ -178,7 +157,7 @@ Move Bot::GetMove()
 
 		for (const Move& move : moves)
 		{
-			Piece movingPiece = engine->GetBoard()[move.startSquare].GetPiece();
+			Piece movingPiece = engine->GetBoard()[GetStart(move)].GetPiece();
 
 			engine->MakeMove(move);
 
@@ -246,13 +225,13 @@ Move Bot::GetMove()
 			break;
 	}
 
-	std::cout << "Making " << bestMove.ToUCIString() << " with score " << bestScore << '\n';
+	std::cout << "Making " << MoveToUCI(bestMove) << " with score " << bestScore << '\n';
 	nodesSearched = 0;
 
-	Piece movingPiece = engine->GetBoard()[bestMove.startSquare].GetPiece();
+	Piece movingPiece = engine->GetBoard()[GetStart(bestMove)].GetPiece();
 	if (!engine->ValidMove(movingPiece, bestMove)) throw "Invalid move";
 
-	if (!bestMove.IsNull())
+	if (!MoveIsNull(bestMove))
 		return bestMove;
 	else
 		throw "Move was null\n";
@@ -312,9 +291,9 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// If we probed a move from TT, move it to the front
 	if (ttMove)
 	{
-		Move m = UnpackMove(ttMove);
+		Move m = ttMove;
 		auto it = std::find_if(moves.begin(), moves.end(), [&](const Move& mv) {
-			return PackMove(mv) == ttMove;
+			return mv == ttMove;
 			});
 		if (it != moves.end())
 			std::swap(moves[0], *it);
@@ -346,7 +325,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		// Late Move Reduction
 		if (depth >= 3 && moveCount > 4
-			&& !move.IsCapture(engine->GetBoard())
+			&& !MoveIsCapture(move, engine->GetBoard())
 			&& !opponentInCheck)
 		{
 			int reduction = 1;
@@ -372,13 +351,13 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		if (eval > bestEval)
 		{
 			bestEval = eval;
-			bestMove32 = PackMove(move);
+			bestMove32 = move;
 		}
 
 		alpha = std::max(alpha, eval);
 		if (alpha >= beta)
 		{
-			if (!move.IsCapture(engine->GetBoard()) && (Pieces)move.promotion == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
+			if (!MoveIsCapture(move, engine->GetBoard()) && (Pieces)GetPromotion(move) == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
 			{
 				if (killerMoves[ply][0] != move)
 				{
@@ -386,10 +365,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 					killerMoves[ply][0] = move;
 				}
 
-				int from = move.startSquare;
-				int to = move.endSquare;
+				int from = GetStart(move);
+				int to = GetEnd(move);
 				Piece movingPiece = engine->GetBoard()[from].GetPiece();
-				int pieceType = (int)movingPiece.GetType();
+				int pieceType = (int)movingPiece.GetType() - 1;
 
 				historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to] += depth * depth;
 			}

@@ -152,6 +152,6 @@ Move PolyglotToMove(uint16_t pmove, Engine* engine)
         if (ToIndex(toRow, toCol) == GameState::enPassantTarget)
             wasEnPassant = true;
 
-    return Move(fromSq, toSq, static_cast<int>(promotion), wasEnPassant, wasCastle);
+    return EncodeMove(fromSq, toSq, static_cast<int>(promotion), wasEnPassant, wasCastle);
 }
 

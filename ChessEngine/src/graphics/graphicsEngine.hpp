@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <vector>
+#include <cstdint>
 
 #include "core/square.hpp"
 #include "core/piece.hpp"
@@ -17,6 +18,7 @@ public:
 	void Render(Square board[64]);
 	void RenderBoard(Square board[64]);
 	void RenderPieces(Square board[64]);
+	void RenderBitboard(uint64_t bitboard); // Blue is 1, red is 0
 	int GetInputs(); // Returns {row, col} of clicked square, or {-1, -1} if none
 	template <typename F>
 	void QueueRender(F&& func);

@@ -7,13 +7,13 @@ enum class Color {
 };
 
 enum class Pieces {
+	NONE,
 	PAWN,
 	KNIGHT,
 	BISHOP,
 	ROOK,
 	QUEEN,
 	KING,
-	NONE
 };
 
 struct Piece

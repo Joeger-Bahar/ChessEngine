@@ -229,7 +229,7 @@ void PerftDebug(Engine* engine, int depth, bool mismatch = false, std::vector<Mo
         if (depth == 1)
             myCount = 0;
 
-        myMoveCounts[move.ToUCIString()] = myCount;
+        myMoveCounts[MoveToUCI(move)] = myCount;
     }
 
     StockfishPerftResult sfCount = StockfishPerft("C:/Users/Joeger/Downloads/stockfish-windows-x86-64-avx2/stockfish/stockfish.exe",

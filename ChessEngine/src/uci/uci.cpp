@@ -117,56 +117,57 @@ void Uci::HandleGo(std::istringstream& iss)
     bot->SetColor(engine->GetCurrentPlayer());
     Move bestMove = bot->GetMoveUCI(wtime, btime);
 
-    std::cout << "bestmove " << bestMove.ToUCIString() << std::endl;
+    std::cout << "bestmove " << MoveToUCI(bestMove) << std::endl;
     std::cout.flush();
 }
 
 Move Uci::ParseMove(const std::string& moveString)
 {
-    Move move;
-
     int startCol = moveString[0] - 'a';
     int startRow = '8' - moveString[1];
     int endCol = moveString[2] - 'a';
     int endRow = '8' - moveString[3];
 
-    move.startSquare = ToIndex(startRow, startCol);
-    move.endSquare = ToIndex(endRow, endCol);
+    int startSquare = ToIndex(startRow, startCol);
+    int endSquare = ToIndex(endRow, endCol);
+    int promotion = static_cast<int>(Pieces::NONE);
+    bool isCastle = false;
+    bool isEnPassant = false;
 
     if (moveString.length() == 5)
     {
         switch (moveString[4])
         {
-            case 'q': move.promotion = static_cast<int>(Pieces::QUEEN);  break;
-            case 'r': move.promotion = static_cast<int>(Pieces::ROOK);   break;
-            case 'b': move.promotion = static_cast<int>(Pieces::BISHOP); break;
-            case 'n': move.promotion = static_cast<int>(Pieces::KNIGHT); break;
-            default: move.promotion = 6; // None
+            case 'q': promotion = static_cast<int>(Pieces::QUEEN);  break;
+            case 'r': promotion = static_cast<int>(Pieces::ROOK);   break;
+            case 'b': promotion = static_cast<int>(Pieces::BISHOP); break;
+            case 'n': promotion = static_cast<int>(Pieces::KNIGHT); break;
+            default: promotion = static_cast<int>(Pieces::NONE); // None
         }
     }
     else
-        move.promotion = 6; // None
+        promotion = static_cast<int>(Pieces::NONE); // None
 
-    Piece movingPiece = engine->GetBoard()[move.startSquare].GetPiece();
-    if (movingPiece.GetType() == Pieces::KING && abs((move.startSquare % 8) - (move.endSquare % 8)) == 2)
+    Piece movingPiece = engine->GetBoard()[startSquare].GetPiece();
+    if (movingPiece.GetType() == Pieces::KING && abs((startSquare % 8) - (endSquare % 8)) == 2)
     {
-        move.wasCastle = true;
+        isCastle = true;
     }
     else
     {
-        move.wasCastle = false;
+        isCastle = false;
     }
 
     if (movingPiece.GetType() == Pieces::PAWN &&
-        (move.startSquare % 8) != (move.endSquare % 8) &&
-        engine->GetBoard()[move.endSquare].IsEmpty())
+        (startSquare % 8) != (endSquare % 8) &&
+        engine->GetBoard()[endSquare].IsEmpty())
     {
-        move.wasEnPassant = true;
+        isEnPassant = true;
     }
     else
     {
-        move.wasEnPassant = false;
+        isEnPassant = false;
     }
 
-    return move;
+    return EncodeMove(startSquare, endSquare, promotion, isEnPassant, isCastle);
 }

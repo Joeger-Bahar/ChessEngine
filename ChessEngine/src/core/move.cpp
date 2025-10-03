@@ -2,24 +2,22 @@
 
 #include <iostream>
 
-
-Move::Move(int startSquare, int endSquare, int promotion, bool wasEnPassant, bool wasCastle)
-	: startSquare(startSquare), endSquare(endSquare), promotion(promotion),
-	wasEnPassant(wasEnPassant), wasCastle(wasCastle)
-{}
-
-const char* Move::ToUCIString() const
+const char* MoveToUCI(Move m)
 {
 	static char buffer[6]; // Max: e2e4q + null
 
-	buffer[0] = 'a' + (startSquare % 8); // file a-h
-	buffer[1] = '8' - (startSquare / 8); // rank 1-8
-	buffer[2] = 'a' + (endSquare % 8);   // file a-h
-	buffer[3] = '8' - (endSquare / 8);   // rank 1-8
+	int start = GetStart(m);
+	int end = GetEnd(m);
+	int promo = GetPromotion(m);
 
-	if (promotion != 6) // If promotion piece
+	buffer[0] = 'a' + (start % 8); // file a-h
+	buffer[1] = '8' - (start / 8); // rank 1-8
+	buffer[2] = 'a' + (end % 8);   // file a-h
+	buffer[3] = '8' - (end / 8);   // rank 1-8
+	
+	if (promo != static_cast<int>(Pieces::NONE)) // If promotion piece
 	{
-		switch (promotion)
+		switch (promo)
 		{
 		case static_cast<int>(Pieces::QUEEN):
 			buffer[4] = 'q'; break;
@@ -43,23 +41,23 @@ const char* Move::ToUCIString() const
 	return buffer;
 }
 
-bool Move::IsNull() const
+bool MoveIsNull(Move m)
 {
-	return startSquare == 0 && endSquare == 0 &&
-		   !wasEnPassant && !wasCastle;
+	return GetStart(m) == 0 && GetEnd(m) == 0 &&
+		!IsEnPassant(m) && !IsCastle(m);
 }
 
-bool Move::IsCapture(const Square board[64]) const
+bool MoveIsCapture(Move m, const Square board[64])
 {
 	bool isCapture = false;
-	if (board[endSquare].GetPiece().GetType() != Pieces::NONE) isCapture = true;
-	if (wasEnPassant) isCapture = true;
-	if (wasCastle) isCapture = false;
+	if (board[GetEnd(m)].GetPiece().GetType() != Pieces::NONE) isCapture = true;
+	if (IsEnPassant(m)) isCapture = true;
+	if (IsCastle(m))    isCapture = false;
 
 	return isCapture;
 }
 
-Move Move::FromUCI(const std::string& uci, const Square board[64])
+Move MoveFromUCI(const std::string& uci, const Square board[64])
 {
 	if (uci.size() < 4)
 		throw "Invalid UCI move: " + uci;
@@ -72,27 +70,27 @@ Move Move::FromUCI(const std::string& uci, const Square board[64])
 	int endCol = uci[2] - 'a';
 	int endRow = '8' - uci[3];
 
-	m.startSquare = startRow * 8 + startCol;
-	m.endSquare =	endRow	 * 8 + endCol;
+	int startSquare = startRow * 8 + startCol;
+	int endSquare   = endRow * 8 + endCol;
 
-	m.promotion = static_cast<int>(Pieces::NONE); // or however you store it
+	int promotion = static_cast<int>(Pieces::NONE); // or however you store it
 	if (uci.size() == 5)
 	{
 		char promoChar = uci[4];
 		switch (promoChar)
 		{
-		case 'q': m.promotion = (int)Pieces::QUEEN; break;
-		case 'r': m.promotion = (int)Pieces::ROOK;  break;
-		case 'b': m.promotion = (int)Pieces::BISHOP; break;
-		case 'n': m.promotion = (int)Pieces::KNIGHT; break;
+		case 'q': promotion = (int)Pieces::QUEEN; break;
+		case 'r': promotion = (int)Pieces::ROOK;  break;
+		case 'b': promotion = (int)Pieces::BISHOP; break;
+		case 'n': promotion = (int)Pieces::KNIGHT; break;
 		default: break; // Invalid char, ignore
 		}
 	}
 
-	// TODO: Need to add en passant
 	// King moved more than 1 space
-	if (board[m.startSquare].GetPiece().GetType() == Pieces::KING && std::abs((m.startSquare % 8) - (m.endSquare % 8)) > 1)
-		m.wasCastle = true;
+	bool castle = false;
+	if (board[startSquare].GetPiece().GetType() == Pieces::KING && std::abs((startSquare % 8) - (endSquare % 8)) > 1)
+		castle = true;
 
-	return m;
+	return EncodeMove(startSquare, endSquare, promotion, false, castle);
 }

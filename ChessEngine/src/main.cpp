@@ -27,11 +27,11 @@ int main()
     const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const char* pawn = "pppppppp/8/8/8/8/8/8/PPPPPPPP w KQkq - 0 1";
     const char* enMis = "7r/1Q3ppp/p7/2k4q/3PB3/8/1PP1NP2/1NB1KR2 w - - 1 24";
-    GameState::uci = true; // Used for bot v. bot iteration testing
+    GameState::uci = false; // Used for bot v. bot iteration testing
     std::unique_ptr<Engine> chessEngine = std::make_unique<Engine>();
     // Smart ptr so I don't need delete at end of file (lazy)
 	std::unique_ptr<Bot> whiteBot = std::make_unique<Bot>(chessEngine.get(), Color::WHITE);
-    //std::unique_ptr<Bot> blackBot = std::make_unique<Bot>(chessEngine.get(), Color::BLACK);
+    std::unique_ptr<Bot> blackBot = std::make_unique<Bot>(chessEngine.get(), Color::BLACK);
 
     if (GameState::uci)
     {
