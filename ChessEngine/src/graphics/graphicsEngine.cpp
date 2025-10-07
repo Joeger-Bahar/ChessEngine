@@ -18,7 +18,7 @@ GraphicsEngine::~GraphicsEngine()
 	Shutdown();
 }
 
-void GraphicsEngine::Render(Square board[64])
+void GraphicsEngine::Render(const Square board[64])
 {
 	// Clear screen
 	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
@@ -36,7 +36,7 @@ void GraphicsEngine::Render(Square board[64])
 	SDL_RenderPresent(renderer);
 }
 
-void GraphicsEngine::RenderBoard(Square board[64])
+void GraphicsEngine::RenderBoard(const Square board[64])
 {
 	// Draw chess board
 	for (int i = 0; i < 8; ++i)
@@ -55,7 +55,7 @@ void GraphicsEngine::RenderBoard(Square board[64])
 	}
 }
 
-void GraphicsEngine::RenderPieces(Square board[64])
+void GraphicsEngine::RenderPieces(const Square board[64])
 {
 	// Draw pieces
 	for (int sq = 0; sq < 64; ++sq)
@@ -111,7 +111,7 @@ int GraphicsEngine::GetInputs()
 			int y = event.button.y;
 			int col = x / 75; // Each square is 75 pixels wide
 			int row = y / 75; // Each square is 75 pixels tall
-			if (InBounds(ToIndex(row, col)))
+			if (InBounds(row, col))
 				return ToIndex(row, col);
 		}
 		else if (event.type == SDL_KEYDOWN) // Left arrow for undo
@@ -157,7 +157,7 @@ void GraphicsEngine::Initialize()
 	}
 
 	// Create renderer
-	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 	if (renderer == nullptr)
 	{
 		SDL_DestroyWindow(window);

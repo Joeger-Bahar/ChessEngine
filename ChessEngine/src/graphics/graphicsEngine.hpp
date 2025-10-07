@@ -15,9 +15,9 @@ class GraphicsEngine
 public:
 	GraphicsEngine();
 	~GraphicsEngine();
-	void Render(Square board[64]);
-	void RenderBoard(Square board[64]);
-	void RenderPieces(Square board[64]);
+	void Render(const Square board[64]);
+	void RenderBoard(const Square board[64]);
+	void RenderPieces(const Square board[64]);
 	void RenderBitboard(uint64_t bitboard); // Blue is 1, red is 0
 	int GetInputs(); // Returns {row, col} of clicked square, or {-1, -1} if none
 	template <typename F>

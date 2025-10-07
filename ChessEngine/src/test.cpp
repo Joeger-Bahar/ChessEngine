@@ -1,33 +1,14 @@
+#include "test.hpp"
+
 #include <iostream>
-#include <map>
-#include <string>
-#include <vector>
 #include <sstream>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
 #include <array>
 #include <fstream>
-#include <unordered_map>
-#include <unordered_set>
 
 #include "core/engine.hpp"
-
-struct StockfishPerftResult
-{
-    long long nodes;
-    std::map<std::string, unsigned long long> moves; // UCI moves at the root
-};
-
-struct TmpFileGuard
-{
-    const std::string filename;
-    TmpFileGuard(std::string fname) : filename(std::move(fname)) {}
-    ~TmpFileGuard()
-    {
-        std::remove(filename.c_str());
-    }
-};
 
 StockfishPerftResult StockfishPerft(const std::string& stockfishPath, const std::string& fen, int depth)
 {
@@ -117,20 +98,7 @@ uint64_t Perft(Engine* engine, int depth)
     }
 
     uint64_t nodes = 0;
-    auto moves = BoardCalculator::GetAllMoves(GameState::currentPlayer, engine->GetBoard(), engine);
-    // Remove checks
-    moves.erase(
-        std::remove_if(moves.begin(), moves.end(),
-            [&](Move move)
-            {
-                // Remove moves that cause checks
-                engine->MakeMove(move);
-                bool inCheck = engine->InCheck(Opponent(GameState::currentPlayer));
-                engine->UndoMove();
-                return inCheck;
-            }),
-        moves.end()
-    );
+    auto moves = BoardCalculator::GetAllLegalMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
 
     //std::cout << "My engine has " << moves.size() << " moves for depth " << depth << "\n";
 
@@ -147,13 +115,6 @@ uint64_t Perft(Engine* engine, int depth)
 void CompareMoveLists(const std::map<std::string, uint64_t>& myMap,
     const std::map<std::string, uint64_t>& sfMoves, Engine* engine)
 {
-    // Convert myMoves to UCI strings and compute perft counts
-    //std::map<std::string, uint64_t> myMap;
-    //for (const auto& move : myMoves)
-    //{
-    //    myMap[move.ToUCIString()] = 0; // Initialize with 0, will fill with actual counts if available
-    //}
-
     // Check for moves missing in either side or mismatched counts
     bool mismatchFound = false;
     for (const auto& [move, sfCount] : sfMoves)
@@ -191,31 +152,19 @@ void CompareMoveLists(const std::map<std::string, uint64_t>& myMap,
         std::cout << "All moves and counts match Stockfish!\n";
     }
     else
+    {
         std::cout << engine->GetFEN() << '\n';
+    }
 }
 
 
-void PerftDebug(Engine* engine, int depth, bool mismatch = false, std::vector<Move> path = {})
+void PerftDebug(Engine* engine, int depth, bool mismatch, std::vector<Move> path)
 {
     //std::cout << "Depth: " << depth << "\n";
     if (depth == 0) return;
 
-    auto moves = BoardCalculator::GetAllMoves(GameState::currentPlayer, engine->GetBoard(), engine);
+    auto moves = BoardCalculator::GetAllLegalMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
 
-    // Remove checks
-    moves.erase(
-        std::remove_if(moves.begin(), moves.end(),
-            [&](Move move)
-            {
-                // Remove moves that cause checks
-                engine->MakeMove(move);
-                bool inCheck = engine->InCheck(Opponent(GameState::currentPlayer));
-                //std::cout << "Move left player in check: " << move.ToUCIString() << '\n';
-                engine->UndoMove();
-                return inCheck;
-            }),
-        moves.end()
-    );
     std::map<std::string, uint64_t> myMoveCounts;
     for (auto& move : moves)
     {
@@ -236,50 +185,4 @@ void PerftDebug(Engine* engine, int depth, bool mismatch = false, std::vector<Mo
         engine->GetFEN(), depth - 1);
 
     CompareMoveLists(myMoveCounts, sfCount.moves, engine);
-    //std::vector<Move> newPath = path;
-    //newPath.push_back(move);
-
-    //if (myCount != sfCount.nodes)
-    //{
-    //    std::cout << "Mismatch at depth " << depth << " My count: " << myCount << " " << sfCount.nodes << " depth: " << depth <<  "!\n";
-    //    std::cout << "Move path: ";
-    //    for (auto& m : newPath) std::cout << m.ToUCIString() << " ";
-    //    std::cout << "\n";
-    //    std::cout << "FEN at mismatch: " << engine->GetFEN() << "\n";
-    //    std::cout << "My count=" << myCount << " Stockfish count=" << sfCount.nodes;
-
-    //    int numMovesHere = Perft(engine, 1);
-    //    StockfishPerftResult sfMovesHere = StockfishPerft("C:/Users/Joeger/Downloads/stockfish-windows-x86-64-avx2/stockfish/stockfish.exe",
-    //        engine->GetFEN(), 1);
-    //    std::cout << "\nMoves for here: " << numMovesHere << " vs stockfish: " << sfMovesHere.nodes << "\n";
-
-    //    auto hereMoves = BoardCalculator::GetAllLegalMoves(GameState::currentPlayer, engine->GetBoard(), engine);
-    //    // Remove checks
-    //    //hereMoves.erase(
-    //    //    std::remove_if(hereMoves.begin(), hereMoves.end(),
-    //    //        [&](Move move)
-    //    //        {
-    //    //            // Remove moves that cause checks
-    //    //            engine->MakeMove(move);
-    //    //            bool inCheck = engine->InCheck(Opponent(GameState::currentPlayer));
-    //    //            engine->UndoMove();
-    //    //            return inCheck;
-    //    //        }),
-    //    //    hereMoves.end()
-    //    //);
-
-    //    CompareMoveLists(hereMoves, sfMovesHere.moves);
-
-    //    std::cout << "\n\n";
-
-    //    // Recurse into this subtree to narrow down the bug
-    //    PerftDebug(engine, depth - 1, true, newPath);
-    //}
-    //else
-    //{
-    //    if (mismatch && depth != 1)
-    //    {
-    //        PerftDebug(engine, depth - 1, true, newPath);
-    //    }
-    //}
 }

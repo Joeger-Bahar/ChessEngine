@@ -204,10 +204,8 @@
     <ClInclude Include="src\stockfish-src\src\types.h" />
     <ClInclude Include="src\stockfish-src\src\uci.h" />
     <ClInclude Include="src\stockfish-src\src\ucioption.h" />
+    <ClInclude Include="src\test.hpp" />
     <ClInclude Include="src\uci\uci.hpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="src\test.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

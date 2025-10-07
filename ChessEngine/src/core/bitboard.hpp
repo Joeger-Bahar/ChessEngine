@@ -9,9 +9,9 @@ using Bitboard = uint64_t;
 constexpr Bitboard EMPTY_BITBOARD = 0ULL;
 constexpr Bitboard FULL_BITBOARD = ~EMPTY_BITBOARD;
 
-inline bool IsSet(Bitboard b, int square) { return b & (1ULL << square); }
-inline bool Set(Bitboard& b, int square)   { b |=  (1ULL << square); }
-inline bool Clear(Bitboard& b, int square) { b &= ~(1ULL << square); }
+inline bool IsSet(const Bitboard& b, int square)  { return b & (1ULL << square); }
+inline void Set  (Bitboard& b, int square) { b |=  (1ULL << square); }
+inline void Clear(Bitboard& b, int square) { b &= ~(1ULL << square); }
 
 struct BitboardBoard
 {

@@ -3,7 +3,16 @@
 #include "uci/uci.hpp"
 #include "bot/opening.hpp"
 
+#include "test.hpp"
+
 #include <memory>
+#include <iostream>
+// Current issues
+// En passant doesn't work
+// Check checkmate calls way to many times
+// King can't move (PopLSB is wrong, like 3 for a king on sq 60)
+// Can't capture king (leave king in check)
+// 
 
 // TODO: Don't clear and refill queued renders every frame
 // TODO: Sometimes using uint8_t for moves has very weird memory bugs, like setting the move col to 204 in GetAllMoves
@@ -11,8 +20,7 @@
 // 
 // TODO: Move extension: If opponent in check/move is promotion extend search 1 further
 // TODO: Tablebase
-// TODO: Optimization with bitboards
-// TODO: ^ Magic bitboards
+// TODO: Magic bitboards
 // TODO: Pondering (search while opponent is moving)
 
 int main()
@@ -25,13 +33,15 @@ int main()
     const char* fenMis = "rnb1kb1r/pppQpppp/5n2/8/8/8/PPPP1PPP/RNB1KBNR b KQkq - 0 5";
     const char* mis = "6K1/2RP4/1B6/pp2r1Rp/1kp2Np1/1p1PN3/8/8 w - - 0 1";
     const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    const char* pawn = "pppppppp/8/8/8/8/8/8/PPPPPPPP w KQkq - 0 1";
     const char* enMis = "7r/1Q3ppp/p7/2k4q/3PB3/8/1PP1NP2/1NB1KR2 w - - 1 24";
-    GameState::uci = false; // Used for bot v. bot iteration testing
+    const char* pawn = "8/bP1pkr2/5p2/1r3pPB/3p4/p6K/1R4P1/3b4 w - - 0 1";
+    GameState::uci = true; // Used for bot v. bot iteration testing
     std::unique_ptr<Engine> chessEngine = std::make_unique<Engine>();
     // Smart ptr so I don't need delete at end of file (lazy)
 	std::unique_ptr<Bot> whiteBot = std::make_unique<Bot>(chessEngine.get(), Color::WHITE);
     std::unique_ptr<Bot> blackBot = std::make_unique<Bot>(chessEngine.get(), Color::BLACK);
+
+    //PerftDebug(chessEngine.get(), 4);
 
     if (GameState::uci)
     {
@@ -40,11 +50,12 @@ int main()
     }
     else
     {
-        //chessEngine->SetBot(whiteBot.get());
-        //chessEngine->SetBot(blackBot.get());
+        chessEngine->SetBot(whiteBot.get());
+        chessEngine->SetBot(blackBot.get());
 
         while (1)
         {
+            //PerftDebug(chessEngine.get(), 3);
             chessEngine->Update();
         }
     }

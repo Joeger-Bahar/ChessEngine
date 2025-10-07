@@ -2,6 +2,7 @@
 
 #include "piece.hpp"
 #include "square.hpp"
+#include "bitboard.hpp"
 
 #include <cstdint>
 #include <string>
@@ -26,4 +27,4 @@ inline bool IsCastle(Move m)       { return (m >> 16) & 1; }
 const char* MoveToUCI(Move m);
 Move MoveFromUCI(const std::string& uci, const Square board[64]);
 bool MoveIsNull(Move m);
-bool MoveIsCapture(Move m, const Square board[64]);
+bool MoveIsCapture(Move m, const BitboardBoard& board);

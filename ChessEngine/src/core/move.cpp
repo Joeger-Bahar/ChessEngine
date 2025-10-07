@@ -2,6 +2,8 @@
 
 #include <iostream>
 
+#include "boardCalculator.hpp"
+
 const char* MoveToUCI(Move m)
 {
 	static char buffer[6]; // Max: e2e4q + null
@@ -47,22 +49,19 @@ bool MoveIsNull(Move m)
 		!IsEnPassant(m) && !IsCastle(m);
 }
 
-bool MoveIsCapture(Move m, const Square board[64])
+bool MoveIsCapture(Move m, const BitboardBoard& board)
 {
-	bool isCapture = false;
-	if (board[GetEnd(m)].GetPiece().GetType() != Pieces::NONE) isCapture = true;
-	if (IsEnPassant(m)) isCapture = true;
-	if (IsCastle(m))    isCapture = false;
+	int endSq = GetEnd(m);
 
-	return isCapture;
+	if (IsCastle(m)) return false;
+	if (!BoardCalculator::IsEmptyAt(endSq, board)) return true;
+	return IsEnPassant(m);
 }
 
 Move MoveFromUCI(const std::string& uci, const Square board[64])
 {
 	if (uci.size() < 4)
 		throw "Invalid UCI move: " + uci;
-
-	Move m;
 
 	// Convert file/rank into col/row
 	int startCol = uci[0] - 'a';

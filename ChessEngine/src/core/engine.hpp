@@ -22,6 +22,7 @@ public:
 	Engine();
 	Engine(std::string fen);
 	~Engine();
+	void Init(std::string fen);
 	void Reset();
 	void LoadPosition(std::string fen);
 
@@ -39,6 +40,7 @@ public:
 	void CheckCheckmate();
 
 	const Square(&GetBoard() const)[64]{ return board; }
+	const BitboardBoard& GetBitboardBoard() { return bitboards; }
 	const Color GetCurrentPlayer() const { return GameState::currentPlayer; }
 	const uint64_t GetZobristKey() { return zobristKey; }
 	std::string GetFEN() const; // Get current position in FEN notation
@@ -53,12 +55,10 @@ public:
 
 	int PieceToIndex(const Piece& p) const;
 	bool ValidMove(const Piece piece, const Move move); // Checks if the move is valid for the piece
+	GraphicsEngine graphics;
 private:
 	bool StoreMove(Move& move);   // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move
-
-	//void RemoveFromBitboards(const Piece& p, int sq);
-	//void AddToBitboards(const Piece& p, int sq);
 
 	void UpdateEndgameStatus();
 	void UpdateCastlingRights(const Move move, const Piece movingPiece, const Piece targetPiece);
@@ -68,7 +68,6 @@ private:
 	inline void ChangePlayers() { GameState::currentPlayer = Opponent(GameState::currentPlayer); }
 
 	Square board[64];
-	GraphicsEngine graphics;
 
 	BitboardBoard bitboards;
 

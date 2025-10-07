@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <chrono>
 #include <Windows.h>
-#include <omp.h>
 #undef min
 #undef max
 using namespace std::chrono;
@@ -138,7 +137,7 @@ Move Bot::GetMove()
 
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
-		std::cout << "Depth: " << depth << '\n';
+		//std::cout << "Depth: " << depth << '\n';
 		int alpha = -INF;
 		int beta = INF;
 		bool foundLegal = false;
@@ -146,7 +145,8 @@ Move Bot::GetMove()
 		Move currentBestMove = Move();
 		int currentBestScore = -INF;
 
-		std::vector<Move> moves = BoardCalculator::GetAllMoves(botColor, engine->GetBoard(), engine);
+		std::vector<Move> moves = moveLists[0];
+		BoardCalculator::GetAllMoves(moves, botColor, engine->GetBitboardBoard(), engine);
 		if (!MoveIsNull(bestMove)) // Current best move first to help with pruning
 			OrderMoves(moves, 0, false, bestMove);
 		else
@@ -285,7 +285,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	}
 
 	std::vector<Move>& moves = moveLists[ply];
-	BoardCalculator::GetAllMoves(moves, movingColor, engine->GetBoard(), engine);
+	BoardCalculator::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
 	OrderMoves(moves, ply, false);
 
 	// If we probed a move from TT, move it to the front
@@ -310,6 +310,11 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// Loop through moves
 	for (const Move& move : moves)
 	{
+		int start = GetStart(move);
+		int end = GetEnd(move);
+		int promotion = GetPromotion(move);
+		bool isEnPassant = IsEnPassant(move);
+		bool isCastle = IsCastle(move);
 		engine->MakeMove(move);
 
 		if (engine->InCheck(movingColor)) { engine->UndoMove(); continue; }
@@ -325,7 +330,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		// Late Move Reduction
 		if (depth >= 3 && moveCount > 4
-			&& !MoveIsCapture(move, engine->GetBoard())
+			&& !MoveIsCapture(move, engine->GetBitboardBoard())
 			&& !opponentInCheck)
 		{
 			int reduction = 1;
@@ -357,7 +362,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		alpha = std::max(alpha, eval);
 		if (alpha >= beta)
 		{
-			if (!MoveIsCapture(move, engine->GetBoard()) && (Pieces)GetPromotion(move) == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
+			if (!MoveIsCapture(move, engine->GetBitboardBoard()) && (Pieces)GetPromotion(move) == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
 			{
 				if (killerMoves[ply][0] != move)
 				{
@@ -421,7 +426,7 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 
 	// Generate only "noisy" moves (captures, promotions, checks)
 	bool onlyNoisy = true;
-	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBoard(), engine, onlyNoisy);
+	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBitboardBoard(), engine, onlyNoisy);
 	OrderMoves(moves, 0, true);
 
 	for (const Move& move : moves)

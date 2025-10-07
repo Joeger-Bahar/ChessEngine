@@ -1,7 +1,7 @@
 #include "square.hpp"
 
-Square::Square(Color c, Piece p)
-	: color(c), piece(p)
+Square::Square(Piece p)
+	: piece(p)
 {
 }
 
@@ -12,15 +12,6 @@ Piece Square::GetPiece() const
 void Square::SetPiece(Piece p)
 {
 	piece = p;
-}
-
-Color Square::GetColor() const
-{
-	return color;
-}
-void Square::SetColor(Color c)
-{
-	color = c;
 }
 
 bool Square::IsEmpty() const
