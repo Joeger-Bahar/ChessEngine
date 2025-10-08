@@ -20,7 +20,7 @@ class Bot
 public:
 	Bot(Engine* engine, Color color);
 	Move GetMove();
-	Move GetMoveUCI(int wtime, int btime);
+	Move GetMoveUCI(int timeForMove);
 	void SetColor(Color color);
 	const Color GetColor() const { return botColor; }
 

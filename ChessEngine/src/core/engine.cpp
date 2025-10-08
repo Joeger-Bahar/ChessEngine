@@ -1025,7 +1025,7 @@ void Engine::CheckCheckmate()
 		Piece p = board[sq].GetPiece();
 		if (p.GetType() == Pieces::NONE || p.GetColor() != currentPlayer) // Empty or opponent's piece
 			continue;
-
+		
 		std::vector<uint8_t> moves = BoardCalculator::GetValidMoves(sq, bitboards);
 		if (!moves.empty())
 		{

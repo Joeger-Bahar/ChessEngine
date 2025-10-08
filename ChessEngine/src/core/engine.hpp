@@ -55,7 +55,6 @@ public:
 
 	int PieceToIndex(const Piece& p) const;
 	bool ValidMove(const Piece piece, const Move move); // Checks if the move is valid for the piece
-	GraphicsEngine graphics;
 private:
 	bool StoreMove(Move& move);   // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move
@@ -68,6 +67,7 @@ private:
 	inline void ChangePlayers() { GameState::currentPlayer = Opponent(GameState::currentPlayer); }
 
 	Square board[64];
+	GraphicsEngine graphics;
 
 	BitboardBoard bitboards;
 

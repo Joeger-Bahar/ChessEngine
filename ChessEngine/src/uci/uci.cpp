@@ -102,24 +102,100 @@ void Uci::HandlePosition(std::istringstream& iss)
     }
 }
 
+//void Uci::HandleGo(std::istringstream& iss)
+//{
+//    int wtime = 300000; // Default 5 minutes
+//    int btime = 300000;
+//
+//    std::string token;
+//    while (iss >> token)
+//    {
+//        if (token == "wtime")      iss >> wtime;
+//        else if (token == "btime") iss >> btime;
+//    }
+//
+//    bot->SetColor(engine->GetCurrentPlayer());
+//    Move bestMove = bot->GetMoveUCI(wtime, btime);
+//
+//    std::cout << "bestmove " << MoveToUCI(bestMove) << std::endl;
+//    std::cout.flush();
+//}
 void Uci::HandleGo(std::istringstream& iss)
 {
-    int wtime = 300000; // Default 5 minutes
-    int btime = 300000;
+    int wtime = -1, btime = -1;        // Remaining time in ms
+    int winc = 0, binc = 0;            // Increment per move in ms
+    int movestogo = -1;                // Moves to next time control
+    int movetime = -1;                 // Fixed time per move
+    int depth = -1, nodes = -1;
+    bool infinite = false;
 
     std::string token;
     while (iss >> token)
     {
         if (token == "wtime")      iss >> wtime;
         else if (token == "btime") iss >> btime;
+        else if (token == "winc")  iss >> winc;
+        else if (token == "binc")  iss >> binc;
+        else if (token == "movestogo") iss >> movestogo;
+        else if (token == "movetime")  iss >> movetime;
+        else if (token == "depth")     iss >> depth;
+        else if (token == "nodes")     iss >> nodes;
+        else if (token == "infinite")  infinite = true;
     }
 
-    bot->SetColor(engine->GetCurrentPlayer());
-    Move bestMove = bot->GetMoveUCI(wtime, btime);
+    // Determine our color
+    Color us = engine->GetCurrentPlayer();
+    int myTime = (us == Color::WHITE ? wtime : btime);
+    int myInc = (us == Color::WHITE ? winc : binc);
+
+    int timeForMove = 0; // ms we allocate to this move
+
+    if (movetime > 0)
+    {
+        // --- Fixed time per move ---
+        timeForMove = movetime;
+    }
+    else if (infinite)
+    {
+        // --- Search until stop command ---
+        timeForMove = -1; // Let search run indefinitely
+    }
+    else if (myTime > 0)
+    {
+        // --- Regular timed games (sudden death, increment, or moves in X time) ---
+
+        int movesLeft = movestogo > 0 ? movestogo : 40; // Estimate if unknown
+
+        // Base allocation: divide remaining time by moves left
+        timeForMove = myTime / movesLeft;
+
+        // Add a fraction of increment (don’t spend it all)
+        timeForMove += static_cast<int>(0.6 * myInc);
+
+        // Safety: don’t use more than 1/10 of remaining time on any single move
+        int maxCap = myTime / 10;
+        if (timeForMove > maxCap)
+            timeForMove = maxCap;
+
+        // Never drop below a small minimum
+        if (timeForMove < 10)
+            timeForMove = 10;
+    }
+    else
+    {
+        // No valid timing info (e.g. analysis mode)
+        timeForMove = 1000; // default 1 second
+    }
+
+    int moveOverhead = ((float)timeForMove * 0.05); // Stop 5% early to prevent the engine going barely over on time
+
+    bot->SetColor(us);
+    Move bestMove = bot->GetMoveUCI(timeForMove - moveOverhead);
 
     std::cout << "bestmove " << MoveToUCI(bestMove) << std::endl;
     std::cout.flush();
 }
+
 
 Move Uci::ParseMove(const std::string& moveString)
 {

@@ -95,15 +95,9 @@ void Bot::Clear()
 	tt.Clear();
 }
 
-Move Bot::GetMoveUCI(int wtime, int btime)
+Move Bot::GetMoveUCI(int timeForMove)
 {
-	int timeForMove;
-	if (IsWhite(botColor))
-		timeForMove = wtime / 20;
-	else
-		timeForMove = btime / 20;
-
-	timePerTurn = 500;
+	timePerTurn = timeForMove;
 	Move move = GetMove();
 	return move;
 }
@@ -240,8 +234,8 @@ Move Bot::GetMove()
 int Bot::Search(int depth, int ply, int alpha, int beta)
 {
 	++nodesSearched;
-	// Check time every 1028 nodes (& faster than %)
-	if ((nodesSearched & 0x1027) == 0)
+	// Check time every 512 nodes (& faster than %)
+	if ((nodesSearched & 511) == 0)
 	{
 		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
 		if (elapsed >= timePerTurn)
@@ -310,11 +304,6 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// Loop through moves
 	for (const Move& move : moves)
 	{
-		int start = GetStart(move);
-		int end = GetEnd(move);
-		int promotion = GetPromotion(move);
-		bool isEnPassant = IsEnPassant(move);
-		bool isCastle = IsCastle(move);
 		engine->MakeMove(move);
 
 		if (engine->InCheck(movingColor)) { engine->UndoMove(); continue; }
@@ -404,7 +393,16 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 int Bot::Qsearch(int alpha, int beta, int ply)
 {
-	nodesSearched++;
+	++nodesSearched;
+	if ((nodesSearched & 511) == 0) // Check time every 512 nodes
+	{
+		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
+		if (elapsed >= timePerTurn)
+		{
+			quitEarly = true;
+			return 0;
+		}
+	}
 
 	int standPat = Eval(GameState::currentPlayer, engine->GetBoard());
 
@@ -426,6 +424,7 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 
 	// Generate only "noisy" moves (captures, promotions, checks)
 	bool onlyNoisy = true;
+
 	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBitboardBoard(), engine, onlyNoisy);
 	OrderMoves(moves, 0, true);
 
@@ -440,6 +439,9 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 
 		int score = -Qsearch(-beta, -alpha, ply + 1);
 		engine->UndoMove();
+
+		if (quitEarly)
+			return 0;
 
 		if (score >= beta)
 			return beta; // Cutoff
