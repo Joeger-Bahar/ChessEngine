@@ -1,6 +1,7 @@
 #include "bot.hpp"
 
 #include "core/boardCalculator.hpp"
+#include "core/movegen.hpp"
 
 #include <limits>
 #include <iostream>
@@ -140,7 +141,7 @@ Move Bot::GetMove()
 		int currentBestScore = -INF;
 
 		std::vector<Move> moves = moveLists[0];
-		BoardCalculator::GetAllMoves(moves, botColor, engine->GetBitboardBoard(), engine);
+		Movegen::GetAllMoves(moves, botColor, engine->GetBitboardBoard(), engine);
 		if (!MoveIsNull(bestMove)) // Current best move first to help with pruning
 			OrderMoves(moves, 0, false, bestMove);
 		else
@@ -279,7 +280,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	}
 
 	std::vector<Move>& moves = moveLists[ply];
-	BoardCalculator::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
+	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
 	OrderMoves(moves, ply, false);
 
 	// If we probed a move from TT, move it to the front
@@ -425,7 +426,7 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 	// Generate only "noisy" moves (captures, promotions, checks)
 	bool onlyNoisy = true;
 
-	std::vector<Move> moves = BoardCalculator::GetAllMoves(movingColor, engine->GetBitboardBoard(), engine, onlyNoisy);
+	std::vector<Move> moves = Movegen::GetAllMoves(movingColor, engine->GetBitboardBoard(), engine, onlyNoisy);
 	OrderMoves(moves, 0, true);
 
 	for (const Move& move : moves)

@@ -144,6 +144,7 @@
     <ClCompile Include="src\core\engine.cpp" />
     <ClCompile Include="src\core\eval.cpp" />
     <ClCompile Include="src\core\gameState.cpp" />
+    <ClCompile Include="src\core\movegen.cpp" />
     <ClCompile Include="src\core\TT.cpp" />
     <ClCompile Include="src\core\zobrist.cpp" />
     <ClCompile Include="src\graphics\graphicsEngine.cpp" />
@@ -162,6 +163,7 @@
     <ClInclude Include="src\core\engine.hpp" />
     <ClInclude Include="src\core\eval.hpp" />
     <ClInclude Include="src\core\gameState.hpp" />
+    <ClInclude Include="src\core\movegen.hpp" />
     <ClInclude Include="src\core\TT.hpp" />
     <ClInclude Include="src\core\zobrist.hpp" />
     <ClInclude Include="src\graphics\graphicsEngine.hpp" />

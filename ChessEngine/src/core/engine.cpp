@@ -1,5 +1,4 @@
 ﻿#include "engine.hpp"
-#include "bot/bot.hpp"
 
 #include <iostream>
 #include <cmath>
@@ -8,6 +7,9 @@
 #include <cstdint>
 #include <algorithm>
 #include <cctype>
+
+#include "bot/bot.hpp"
+#include "movegen.hpp"
 
 // Make GameState variables not need prefix
 using namespace GameState;
@@ -37,7 +39,7 @@ void Engine::Init(std::string fen)
 	positionStack.push_back(startKey);
 	positionCounts[startKey] = 1;
 
-	BoardCalculator::InitPrecomputedAttacks();
+	Movegen::InitPrecomputedAttacks();
 }
 
 void Engine::Reset()
@@ -133,7 +135,7 @@ void Engine::Render()
 		graphics.QueueRender([=]() { graphics.DrawSquareHighlight(firstClick, { 0, 255, 0, 100 }); });
 
 		// Render the valid moves for the selected piece
-		for (uint8_t moveSq : BoardCalculator::GetValidMoves(firstClick, bitboards))
+		for (uint8_t moveSq : Movegen::GetValidMoves(firstClick, bitboards))
 		{
 			graphics.QueueRender([=]() { graphics.DrawSquareHighlight(moveSq, { 0, 0, 255, 100 }); }); // Blue highlight
 		}
@@ -556,7 +558,7 @@ bool Engine::Is50Move() const
 bool Engine::ValidMove(const Piece piece, const Move move)
 {
 	// Check if the move is valid for the given piece type
-	std::vector<uint8_t> validMoves = BoardCalculator::GetValidMoves(GetStart(move), bitboards);
+	std::vector<uint8_t> validMoves = Movegen::GetValidMoves(GetStart(move), bitboards);
 
 	for (uint8_t validMove : validMoves)
 		if (validMove == GetEnd(move))
@@ -929,9 +931,9 @@ void Engine::SetBot(Bot* bot)
 
 void Engine::CheckKingInCheck()
 {
-	if (BoardCalculator::IsSquareAttacked(whiteKingPos, Color::BLACK, bitboards)) checkStatus |= (1 << 1);
+	if (Movegen::IsSquareAttacked(whiteKingPos, Color::BLACK, bitboards)) checkStatus |= (1 << 1);
 	else checkStatus &= ~(1 << 1);
-	if (BoardCalculator::IsSquareAttacked(blackKingPos, Color::WHITE, bitboards)) checkStatus |= (1 << 0);
+	if (Movegen::IsSquareAttacked(blackKingPos, Color::WHITE, bitboards)) checkStatus |= (1 << 0);
 	else checkStatus &= ~(1 << 0);
 }
 
@@ -1026,7 +1028,7 @@ void Engine::CheckCheckmate()
 		if (p.GetType() == Pieces::NONE || p.GetColor() != currentPlayer) // Empty or opponent's piece
 			continue;
 		
-		std::vector<uint8_t> moves = BoardCalculator::GetValidMoves(sq, bitboards);
+		std::vector<uint8_t> moves = Movegen::GetValidMoves(sq, bitboards);
 		if (!moves.empty())
 		{
 			hasMoves = true;

@@ -9,6 +9,7 @@
 #include <fstream>
 
 #include "core/engine.hpp"
+#include "core/movegen.hpp"
 
 StockfishPerftResult StockfishPerft(const std::string& stockfishPath, const std::string& fen, int depth)
 {
@@ -98,7 +99,7 @@ uint64_t Perft(Engine* engine, int depth)
     }
 
     uint64_t nodes = 0;
-    auto moves = BoardCalculator::GetAllLegalMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
+    auto moves = Movegen::GetAllLegalMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
 
     //std::cout << "My engine has " << moves.size() << " moves for depth " << depth << "\n";
 
@@ -163,7 +164,7 @@ void PerftDebug(Engine* engine, int depth, bool mismatch, std::vector<Move> path
     //std::cout << "Depth: " << depth << "\n";
     if (depth == 0) return;
 
-    auto moves = BoardCalculator::GetAllLegalMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
+    auto moves = Movegen::GetAllLegalMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
 
     std::map<std::string, uint64_t> myMoveCounts;
     for (auto& move : moves)
