@@ -163,6 +163,7 @@
     <ClInclude Include="src\core\engine.hpp" />
     <ClInclude Include="src\core\eval.hpp" />
     <ClInclude Include="src\core\gameState.hpp" />
+    <ClInclude Include="src\core\constants.hpp" />
     <ClInclude Include="src\core\movegen.hpp" />
     <ClInclude Include="src\core\TT.hpp" />
     <ClInclude Include="src\core\zobrist.hpp" />

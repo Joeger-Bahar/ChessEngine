@@ -4,29 +4,9 @@
 #include "engine.hpp"
 
 #include <vector>
-#include <string>
-#include <fstream>
 #include <iostream>
-#include <limits>
 
-#include "generatedMagics.hpp"
-
-// Stockfish inspired
-// small deterministic PRNG (splitmix64) with a sparse_rand helper
-//struct SplitMix64
-//{
-//	uint64_t state;
-//	SplitMix64(uint64_t seed = 0x9E3779B97F4A7C15ULL) : state(seed) {}
-//	uint64_t next()
-//	{
-//		uint64_t z = (state += 0x9e3779b97f4a7c15ULL);
-//		z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
-//		z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
-//		return z ^ (z >> 31);
-//	}
-//	// produce sparse bitboards (ANDing multiple random words)
-//	uint64_t sparse_rand() { return next() & next() & next(); }
-//};
+#include "constants.hpp"
 
 inline int PopLSB(Bitboard& b)
 {
@@ -85,12 +65,8 @@ Bitboard pawnAttacks[2][64];
 Bitboard knightAttacks[64];
 Bitboard kingAttacks[64];
 
-Bitboard rookMagicAttacks[64][4096];   // 4096 = 2^12, max rook relevant occupancy bits
-Bitboard bishopMagicAttacks[64][512];  // 512 = 2^9, max bishop relevant occupancy bits
-//uint64_t rookMagics[64];
-//uint64_t bishopMagics[64];
-//int		 rookShifts[64];
-//int		 bishopShifts[64];
+Bitboard rookAttacks[64][4096];   // 4096 = 2^12, max rook relevant occupancy bits
+Bitboard bishopAttacks[64][512];  // 512 = 2^9, max bishop relevant occupancy bits
 Bitboard rookMasks[64];
 Bitboard bishopMasks[64];
 
@@ -347,13 +323,13 @@ Bitboard Movegen::SlidingMoves(int sq, Color color, const Pieces piece,
 	{
 		Bitboard occR = occ & rookMasks[sq];
 		uint64_t idxR = (occR * rookMagics[sq]) >> rookShifts[sq];
-		moves |= rookMagicAttacks[sq][idxR];
+		moves |= rookAttacks[sq][idxR];
 	}
 	if (bishopMoves)
 	{
 		Bitboard occB = occ & bishopMasks[sq];
 		uint64_t idxB = (occB * bishopMagics[sq]) >> bishopShifts[sq];
-		moves |= bishopMagicAttacks[sq][idxB];
+		moves |= bishopAttacks[sq][idxB];
 	}
 
 	if (!includeBlockers)
@@ -540,12 +516,12 @@ void Movegen::BuildMagicAttackTables()
 			{
 				Bitboard occ = SetOccupancy(i, bits, mask);
 				uint64_t index = (occ * rookMagics[sq]) >> rookShifts[sq];
-				rookMagicAttacks[sq][index] = ComputeRookAttacks(sq, occ);
+				rookAttacks[sq][index] = ComputeRookAttacks(sq, occ);
 			}
 
 			// Handle trivial edge squares (no relevant bits)
 			if (bits == 0)
-				rookMagicAttacks[sq][0] = ComputeRookAttacks(sq, 0ULL);
+				rookAttacks[sq][0] = ComputeRookAttacks(sq, 0ULL);
 		}
 
 		// Bishop
@@ -560,176 +536,11 @@ void Movegen::BuildMagicAttackTables()
 			{
 				Bitboard occ = SetOccupancy(i, bits, mask);
 				uint64_t index = (occ * bishopMagics[sq]) >> bishopShifts[sq];
-				bishopMagicAttacks[sq][index] = ComputeBishopAttacks(sq, occ);
+				bishopAttacks[sq][index] = ComputeBishopAttacks(sq, occ);
 			}
 
 			if (bits == 0)
-				bishopMagicAttacks[sq][0] = ComputeBishopAttacks(sq, 0ULL);
+				bishopAttacks[sq][0] = ComputeBishopAttacks(sq, 0ULL);
 		}
 	}
 }
-
-// Generate magics and fill the global arrays you already declared:
-// rookMagics[], bishopMagics[], rookShifts[], bishopShifts[],
-// rookMasks[], bishopMasks[], rookMagicAttacks[][], bishopMagicAttacks[][]
-
-// Generates stockfish's optimal magics and writes them to file
-//void Movegen::GenerateAndInitMagics(bool dumpToHeader = false, const std::string& outPath = "magics_generated.hpp")
-//{
-//	SplitMix64 rng(0xF00BA5ED); // deterministic seed (you can vary per-square if you want)
-//	// For each square, generate mask + enumerate occupancy subsets + find magic
-//	for (int sq = 0; sq < 64; ++sq)
-//	{
-//		// ---- ROOK ----
-//		{
-//			Bitboard mask = RookMask(sq);
-//			rookMasks[sq] = mask;
-//			int bits = PopCount64(mask);
-//			int tableSize = 1 << bits;
-//			rookShifts[sq] = 64 - bits;
-//
-//			// Enumerate occupancies and precompute reference attacks
-//			std::vector<Bitboard> occupancies;
-//			std::vector<Bitboard> reference;
-//			Bitboard b = 0ULL;
-//			do {
-//				occupancies.push_back(b);
-//				reference.push_back(ComputeRookAttacks(sq, b));
-//				b = (b - mask) & mask;
-//			} while (b);
-//
-//			// If no relevant bits -> trivial
-//			if (bits == 0)
-//			{
-//				rookMagics[sq] = 0ULL;
-//				rookMagicAttacks[sq][0] = reference[0];
-//			}
-//			else
-//			{
-//				std::vector<Bitboard> table(tableSize, 0ULL);
-//				std::vector<int> used(tableSize, -1);
-//
-//				// Try candidates until collision-free
-//				for (;;)
-//				{
-//					uint64_t candidate = rng.sparse_rand();
-//					// heuristic: ensure candidate produces some spread (like stockfish)
-//					if (PopCount64((candidate * mask) >> 56) < 6) continue;
-//
-//					std::fill(used.begin(), used.end(), -1);
-//					bool collision = false;
-//
-//					for (size_t i = 0; i < occupancies.size(); ++i)
-//					{
-//						uint64_t idx = (uint64_t)((occupancies[i] * candidate) >> (64 - bits));
-//						if (used[idx] == -1)
-//						{
-//							used[idx] = (int)i;
-//							table[idx] = reference[i];
-//						}
-//						else
-//						{
-//							if (table[idx] != reference[i]) { collision = true; break; }
-//						}
-//					}
-//
-//					if (!collision)
-//					{
-//						// accept candidate, copy table into global attack array
-//						rookMagics[sq] = candidate;
-//						for (int i = 0; i < tableSize; ++i)
-//							rookMagicAttacks[sq][i] = table[i];
-//						break;
-//					}
-//				} // candidate loop
-//			}
-//		}
-//
-//		// ---- BISHOP ----
-//		{
-//			Bitboard mask = BishopMask(sq);
-//			bishopMasks[sq] = mask;
-//			int bits = PopCount64(mask);
-//			int tableSize = 1 << bits;
-//			bishopShifts[sq] = 64 - bits;
-//
-//			// Enumerate occupancies and precompute reference attacks
-//			std::vector<Bitboard> occupancies;
-//			std::vector<Bitboard> reference;
-//			Bitboard b = 0ULL;
-//			do {
-//				occupancies.push_back(b);
-//				reference.push_back(ComputeBishopAttacks(sq, b));
-//				b = (b - mask) & mask;
-//			} while (b);
-//
-//			if (bits == 0)
-//			{
-//				bishopMagics[sq] = 0ULL;
-//				bishopMagicAttacks[sq][0] = reference[0];
-//			}
-//			else
-//			{
-//				std::vector<Bitboard> table(tableSize, 0ULL);
-//				std::vector<int> used(tableSize, -1);
-//
-//				for (;;)
-//				{
-//					uint64_t candidate = rng.sparse_rand();
-//					if (PopCount64((candidate * mask) >> 56) < 6) continue;
-//
-//					std::fill(used.begin(), used.end(), -1);
-//					bool collision = false;
-//
-//					for (size_t i = 0; i < occupancies.size(); ++i)
-//					{
-//						uint64_t idx = (uint64_t)((occupancies[i] * candidate) >> (64 - bits));
-//						if (used[idx] == -1)
-//						{
-//							used[idx] = (int)i;
-//							table[idx] = reference[i];
-//						}
-//						else
-//						{
-//							if (table[idx] != reference[i]) { collision = true; break; }
-//						}
-//					}
-//
-//					if (!collision)
-//					{
-//						bishopMagics[sq] = candidate;
-//						for (int i = 0; i < tableSize; ++i)
-//							bishopMagicAttacks[sq][i] = table[i];
-//						break;
-//					}
-//				} // candidate loop
-//			}
-//		}
-//	} // for each square
-//
-//	// Optional: dump the resulting constants to a header file so you can include them statically later
-//	if (dumpToHeader)
-//	{
-//		std::ofstream out(outPath);
-//		if (out)
-//		{
-//			out << "#pragma once\n#include <cstdint>\n\n";
-//			out << "static const uint64_t GENERATED_ROOK_MAGICS[64] = {\n";
-//			for (int i = 0; i < 64; ++i) { out << "  0x" << std::hex << rookMagics[i]; if (i + 1 < 64) out << ","; out << "\n"; }
-//			out << "};\n\n";
-//			out << "static const uint64_t GENERATED_BISHOP_MAGICS[64] = {\n";
-//			for (int i = 0; i < 64; ++i) { out << "  0x" << std::hex << bishopMagics[i]; if (i + 1 < 64) out << ","; out << "\n"; }
-//			out << "};\n\n";
-//			out << "static const int GENERATED_ROOK_SHIFTS[64] = {\n";
-//			for (int i = 0; i < 64; ++i) { out << "  " << std::dec << rookShifts[i]; if (i + 1 < 64) out << ","; out << "\n"; }
-//			out << "};\n\n";
-//			out << "static const int GENERATED_BISHOP_SHIFTS[64] = {\n";
-//			for (int i = 0; i < 64; ++i) { out << "  " << std::dec << bishopShifts[i]; if (i + 1 < 64) out << ","; out << "\n"; }
-//			out << "};\n";
-//			out.close();
-//			std::cout << "Wrote magic constants to " << outPath << "\n";
-//		}
-//		else
-//			std::cerr << "Failed to open " << outPath << " for writing\n";
-//	}
-//}
