@@ -3,6 +3,8 @@
 #include "core/boardCalculator.hpp"
 #include "core/movegen.hpp"
 
+#include "tablebase.hpp"
+
 #include <limits>
 #include <iostream>
 #include <vector>
@@ -15,6 +17,8 @@ using namespace std::chrono;
 
 constexpr int INF = std::numeric_limits<int>::max() / 4;
 constexpr int MATE_VAL = 1000000;
+
+static Tablebase tb("res/syzygy/");
 
 Bot::Bot(Engine* engine, Color color)
 {
@@ -105,6 +109,7 @@ Move Bot::GetMoveUCI(int timeForMove)
 
 Move Bot::GetMove()
 {
+	// TODO: Don't need bestMove in tt
 	Move bookMove = GetBookMove(engine, "res/openings.bin");
 	if (!MoveIsNull(bookMove))
 	{
@@ -130,6 +135,11 @@ Move Bot::GetMove()
 	Move bestMove = Move();
 	int bestScore = -INF;
 
+	if (tb.Probeable(engine->GetBitboardBoard()))
+	{
+		return tb.GetMove(engine);
+	}
+
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
 		//std::cout << "Depth: " << depth << '\n';
@@ -152,8 +162,6 @@ Move Bot::GetMove()
 
 		for (const Move& move : moves)
 		{
-			Piece movingPiece = engine->GetBoard()[GetStart(move)].GetPiece();
-
 			engine->MakeMove(move);
 
 			if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
@@ -249,7 +257,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	if (engine->IsDraw())
 		return 0;
 
-	if (depth == 0 || engine->IsOver())
+	if (depth <= 0 || engine->IsOver())
 	{
 		return Qsearch(alpha, beta, 1);
 		//return Eval(GameState::currentPlayer, engine->GetBoard());
@@ -274,9 +282,8 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		if (quitEarly) return 0;
 
-		if (nullScore >= beta) {
+		if (nullScore >= beta)
 			return beta; // Fail-hard beta cutoff
-		}
 	}
 
 	std::vector<Move>& moves = moveLists[ply];

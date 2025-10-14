@@ -25,4 +25,6 @@ public:
 	static bool GetPieceAt(int sq, const BitboardBoard& board, Piece& piece);
 	static uint8_t FindPiece(Piece piece, const BitboardBoard& board);
 	static bool IsEmptyAt(int sq, const BitboardBoard& board);
+
+	static int TotalPieces(const BitboardBoard& board);
 };

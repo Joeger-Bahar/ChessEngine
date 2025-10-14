@@ -113,7 +113,6 @@ void Engine::Update()
 		break; // Move was valid, exit loop
 	}
 
-	// Make the move
 	MakeMove(move);
 	UpdateEndgameStatus();
 	std::cout << MoveToUCI(move) << '\n';
@@ -398,8 +397,6 @@ void Engine::ProcessMove(Move& move)
 
 void Engine::MakeMove(const Move move)
 {
-	//graphics.RenderBitboard(bitboards.pieceBitboards[1][2]);
-	//graphics.Render(board);
 	const int startSquare = GetStart(move);
 	const int endSquare = GetEnd(move);
 	const int promotion = GetPromotion(move);
@@ -548,6 +545,13 @@ bool Engine::IsThreefold() const
 	if (positionStack.empty()) return false;
 	auto it = positionCounts.find(positionStack.back());
 	return (it != positionCounts.end() && it->second >= 3);
+}
+
+bool Engine::HasRepeated() const
+{
+	if (positionStack.empty()) return false;
+	auto it = positionCounts.find(positionStack.back());
+	return (it != positionCounts.end() && it->second >= 2);
 }
 
 bool Engine::Is50Move() const
@@ -879,7 +883,6 @@ void Engine::MakeNullMove()
 
 	positionStack.push_back(zobristKey);
 	positionCounts[zobristKey] += 1;
-
 }
 
 void Engine::UndoNullMove()

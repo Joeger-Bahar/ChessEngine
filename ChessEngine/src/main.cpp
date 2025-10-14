@@ -7,14 +7,17 @@
 
 #include <memory>
 
-// TODO: Don't clear and refill queued renders every frame
 // TODO: Sometimes using uint8_t for moves has very weird memory bugs, like setting the move col to 204 in GetAllMoves
-// TODO: Logging
 // 
-// TODO: Move extension: If opponent in check/move is promotion extend search 1 further
 // TODO: Tablebase
-// TODO: Magic bitboards
-// TODO: Pondering (search while opponent is moving)
+// TODO: Move extension (check, recapture, passed pawn)
+// TODO: Aspiration window
+// TODO: Futility pruning & razoring
+// TODO: SEE for capture pruning (qsearch)
+// TODO: Countermove heuristic
+// TODO: Pawn hash (for eval of pawn positions)
+// TODO: ProbCut, Multi-Cut
+// TODO: Asymmetric search
 
 int main()
 {
@@ -27,7 +30,7 @@ int main()
     const char* mis = "6K1/2RP4/1B6/pp2r1Rp/1kp2Np1/1p1PN3/8/8 w - - 0 1";
     const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const char* enMis = "7r/1Q3ppp/p7/2k4q/3PB3/8/1PP1NP2/1NB1KR2 w - - 1 24";
-    const char* pawn = "8/bP1pkr2/5p2/1r3pPB/3p4/p6K/1R4P1/3b4 w - - 0 1";
+    const char* pawn = "K7/2P5/8/8/4pP2/8/5b2/k7 w - - 0 1";
     GameState::uci = true; // Used for bot v. bot iteration testing
     std::unique_ptr<Engine> chessEngine = std::make_unique<Engine>();
     // Smart ptr so I don't need delete at end of file (lazy)

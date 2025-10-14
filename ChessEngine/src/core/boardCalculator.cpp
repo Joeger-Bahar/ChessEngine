@@ -68,6 +68,15 @@ bool BoardCalculator::IsEmptyAt(int sq, const BitboardBoard& board)
 	return !GetPieceAt(sq, board, temp); // Returns false if no piece there
 }
 
+int BoardCalculator::TotalPieces(const BitboardBoard& board)
+{
+	int total = 0;
+	for (int c = 0; c < 2; ++c)
+		for (int t = 0; t < 6; ++t)
+			total += __popcnt64(board.pieceBitboards[c][t]);
+	return total;
+}
+
 bool BoardCalculator::IsCastlingValid(bool kingside, const BitboardBoard& board)
 {
 	Color player = GameState::currentPlayer;

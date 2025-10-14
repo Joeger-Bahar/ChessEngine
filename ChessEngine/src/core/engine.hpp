@@ -48,6 +48,7 @@ public:
 
 	bool IsDraw() const;
 	bool IsThreefold() const;
+	bool HasRepeated() const;
 	bool Is50Move() const;
 	inline const bool IsOver() const { return GameState::checkmate || GameState::draw; }
 	inline const bool InCheck(Color color) { return (GameState::checkStatus & (IsWhite(color) ? 0b10 : 0b01)) != 0; }
@@ -66,8 +67,8 @@ private:
 
 	inline void ChangePlayers() { GameState::currentPlayer = Opponent(GameState::currentPlayer); }
 
-	Square board[64];
 	GraphicsEngine graphics;
+	Square board[64];
 
 	BitboardBoard bitboards;
 
