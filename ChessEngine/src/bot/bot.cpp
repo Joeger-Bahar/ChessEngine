@@ -254,6 +254,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		}
 	}
 
+	bool followingNullMove = afterNullMove; // Used for this search only
+	afterNullMove = false;
+	bool pvNode = beta - alpha > 1;
+
 	if (engine->IsDraw())
 		return 0;
 
@@ -261,6 +265,54 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	{
 		return Qsearch(alpha, beta, 1);
 		//return Eval(GameState::currentPlayer, engine->GetBoard());
+	}
+
+	if (!engine->InCheck(GameState::currentPlayer) && !pvNode)
+	{
+		int eval = Eval(GameState::currentPlayer, engine->GetBoard());
+
+		// Razoring
+		const int RAZORING_MARGIN = 300;
+		if (depth <= 2 && !followingNullMove &&
+		   (eval + (RAZORING_MARGIN * depth) < alpha))
+		{
+			int qEval = Qsearch(alpha, beta, ply + 1);
+			if (qEval < alpha)
+				return qEval;
+		}
+
+		// Futility pruning
+		const int futility_margin[4] = {0, 150, 300, 500};
+		if (depth <= 3)
+		{
+			if (eval + futility_margin[depth] <= alpha)
+			{
+				std::vector<Move> moves = Movegen::GetAllMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
+
+				// Only prune quiet moves
+				for (const Move& move : moves)
+				{
+					bool givesCheck = false;
+					engine->MakeMove(move);
+					if (engine->InCheck(GameState::currentPlayer)) // Opponent
+						givesCheck = true;
+					engine->UndoMove();
+
+					if (MoveIsCapture(move, engine->GetBitboardBoard()) || GetPromotion(move) != 0 || givesCheck)
+						continue;
+
+					engine->MakeMove(move);
+					int score = -Search(depth - 1, ply + 1, -beta, -alpha);
+					engine->UndoMove();
+
+					if (score >= beta)
+						return beta;
+					if (score > alpha)
+						alpha = score;
+				}
+				return alpha;
+			}
+		}
 	}
 
 	uint64_t key = engine->GetZobristKey();
@@ -277,6 +329,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	{
 		int reduction = 2;
 		engine->MakeNullMove();
+		afterNullMove = true;
 		int nullScore = -Search(depth - 1 - reduction, ply + 1, -beta, -beta + 1);
 		engine->UndoNullMove();
 

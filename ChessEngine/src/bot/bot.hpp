@@ -44,4 +44,5 @@ private:
 	int nodesSearched;
 	int timePerTurn = 500; // In milliseconds
 	bool quitEarly = false;
+	bool afterNullMove = false;
 };
