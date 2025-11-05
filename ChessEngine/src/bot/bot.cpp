@@ -25,7 +25,7 @@ Bot::Bot(Engine* engine, Color color)
 	this->engine = engine;
 	this->botColor = color;
 
-	for (int i = 0; i < 128; ++i)
+	for (int i = 0; i < MAX_PLY; ++i)
 		moveLists[i].clear();
 }
 
@@ -45,7 +45,7 @@ int PieceValue(Piece piece)
 
 // Move ordering scores
 const int captureBonus = 1000000;
-const int killerBonus = 500000;
+const int killerBonus  = 100000;
 
 int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 {
@@ -59,6 +59,18 @@ int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 	if (onlyMVVLVA) return 0;
 	if (move == killerMoves[ply][0]) return killerBonus;
 	else if (move == killerMoves[ply][1]) return killerBonus - 100;
+
+	if (ply > 0 && !moveLists[ply - 1].empty())
+	{
+		Move prev = moveLists[ply - 1][0];
+
+		int prevFrom = GetStart(prev);
+		int prevTo = GetEnd(prev);
+		Color color = (Color)moved.GetColor();
+
+		if (move == counterMoves[(int)color][prevFrom][prevTo])
+			return killerBonus - 200; // Slightly below killer moves
+	}
 
 	return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType() - 1][GetStart(move)][GetEnd(move)];
 }
@@ -91,11 +103,13 @@ void Bot::SetColor(Color color)
 
 void Bot::Clear()
 {
-	for (int i = 0; i < 32; ++i)
+	for (int i = 0; i < MAX_PLY; ++i)
 		moveLists[i].clear();
 
 	nodesSearched = 0;
 	quitEarly = false;
+
+	memset(counterMoves, 0, sizeof(counterMoves));
 
 	tt.Clear();
 }
@@ -109,7 +123,6 @@ Move Bot::GetMoveUCI(int timeForMove)
 
 Move Bot::GetMove()
 {
-	// TODO: Don't need bestMove in tt
 	Move bookMove = GetBookMove(engine, "res/openings.bin");
 	if (!MoveIsNull(bookMove))
 	{
@@ -250,24 +263,19 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		if (elapsed >= timePerTurn)
 		{
 			quitEarly = true;
-			return 0;
+			return alpha;
 		}
 	}
 
 	bool followingNullMove = afterNullMove; // Used for this search only
 	afterNullMove = false;
-	bool pvNode = beta - alpha > 1;
+	bool pvNode = (beta - alpha) > 1;
 
-	if (engine->IsDraw())
-		return 0;
+	if (engine->IsDraw()) return 0;
 
-	if (depth <= 0 || engine->IsOver())
-	{
-		return Qsearch(alpha, beta, 1);
-		//return Eval(GameState::currentPlayer, engine->GetBoard());
-	}
+	if (depth <= 0 || engine->IsOver()) return Qsearch(alpha, beta, 1);
 
-	if (!engine->InCheck(GameState::currentPlayer) && !pvNode)
+	if (!pvNode && !engine->InCheck(GameState::currentPlayer))
 	{
 		int eval = Eval(GameState::currentPlayer, engine->GetBoard());
 
@@ -277,41 +285,35 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		   (eval + (RAZORING_MARGIN * depth) < alpha))
 		{
 			int qEval = Qsearch(alpha, beta, ply + 1);
-			if (qEval < alpha)
-				return qEval;
+			if (qEval < alpha) return qEval;
 		}
 
 		// Futility pruning
-		const int futility_margin[4] = {0, 150, 300, 500};
-		if (depth <= 3)
+		const int futility_margin[4] = {0, 100, 200, 300};
+		if (depth <= 3 && eval + futility_margin[depth] <= alpha)
 		{
-			if (eval + futility_margin[depth] <= alpha)
+			std::vector<Move> moves = Movegen::GetAllMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
+
+			// Only prune quiet moves
+			for (const Move& move : moves)
 			{
-				std::vector<Move> moves = Movegen::GetAllMoves(GameState::currentPlayer, engine->GetBitboardBoard(), engine);
+				bool givesCheck = false;
+				engine->MakeMove(move);
+				if (engine->InCheck(GameState::currentPlayer)) // Opponent
+					givesCheck = true;
+				engine->UndoMove();
 
-				// Only prune quiet moves
-				for (const Move& move : moves)
-				{
-					bool givesCheck = false;
-					engine->MakeMove(move);
-					if (engine->InCheck(GameState::currentPlayer)) // Opponent
-						givesCheck = true;
-					engine->UndoMove();
+				if (MoveIsCapture(move, engine->GetBitboardBoard()) || GetPromotion(move) != 0 || givesCheck)
+					continue;
 
-					if (MoveIsCapture(move, engine->GetBitboardBoard()) || GetPromotion(move) != 0 || givesCheck)
-						continue;
+				engine->MakeMove(move);
+				int score = -Search(depth - 1, ply + 1, -beta, -alpha);
+				engine->UndoMove();
 
-					engine->MakeMove(move);
-					int score = -Search(depth - 1, ply + 1, -beta, -alpha);
-					engine->UndoMove();
-
-					if (score >= beta)
-						return beta;
-					if (score > alpha)
-						alpha = score;
-				}
-				return alpha;
+				if (score >= beta) return beta;
+				if (score > alpha) alpha = score;
 			}
+			return alpha;
 		}
 	}
 
@@ -325,28 +327,39 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	bool foundLegal = false;
 
 	// Null move reduction
-	if (depth >= 3 && !engine->InCheck(movingColor) && !GameState::endgame)
+	if (depth >= 3 && !engine->InCheck(movingColor) && !GameState::endgame && !followingNullMove)
 	{
-		int reduction = 2;
+		int reduction = 3;
 		engine->MakeNullMove();
 		afterNullMove = true;
-		int nullScore = -Search(depth - 1 - reduction, ply + 1, -beta, -beta + 1);
+		int nullScore = -Search(std::max(0, depth - 1 - reduction), ply + 1, -beta, -beta + 1);
 		engine->UndoNullMove();
 
-		if (quitEarly) return 0;
+		if (quitEarly) return alpha;
 
 		if (nullScore >= beta)
 			return beta; // Fail-hard beta cutoff
 	}
 
+	std::vector<Move> pseudoMoves;
+	Movegen::GetAllMoves(pseudoMoves, movingColor, engine->GetBitboardBoard(), engine);
+
 	std::vector<Move>& moves = moveLists[ply];
-	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
+	moves.clear();
+
+	for (const Move& move : pseudoMoves)
+	{
+		engine->MakeMove(move);
+		if (!engine->InCheck(movingColor))
+			moves.push_back(move);
+		engine->UndoMove();
+	}
+
 	OrderMoves(moves, ply, false);
 
 	// If we probed a move from TT, move it to the front
 	if (ttMove)
 	{
-		Move m = ttMove;
 		auto it = std::find_if(moves.begin(), moves.end(), [&](const Move& mv) {
 			return mv == ttMove;
 			});
@@ -365,43 +378,25 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// Loop through moves
 	for (const Move& move : moves)
 	{
+		bool captureMove = MoveIsCapture(move, engine->GetBitboardBoard());
+		bool isKillerMove = (move == killerMoves[ply][0] || move == killerMoves[ply][1]);
+		bool isHistoryBest = (ScoreMove(move, ply, false) >= killerBonus);
+
 		engine->MakeMove(move);
 
-		if (engine->InCheck(movingColor)) { engine->UndoMove(); continue; }
-
 		++moveCount;
-
 		bool opponentInCheck = engine->InCheck(Opponent(movingColor));
-
 		foundLegal = true;
 
-		int newDepth = depth - 1;
 		int eval;
 
-		// Late Move Reduction
-		if (depth >= 3 && moveCount > 4
-			&& !MoveIsCapture(move, engine->GetBitboardBoard())
-			&& !opponentInCheck)
-		{
-			int reduction = 1;
+		int newDepth = depth - 1;
 
-			int reduced = -Search(newDepth - reduction, ply + 1, -alpha - 1, -alpha);
-
-			if (reduced > alpha) // Move is actually good
-			{
-				// Research at full depth
-				eval = -Search(newDepth, ply + 1, -beta, -alpha);
-			}
-			else
-				eval = reduced;
-		}
-		else // Normal search
-			eval = -Search(newDepth, ply + 1, -beta, -alpha);
+		eval = -Search(newDepth, ply + 1, -beta, -alpha);
 
 		engine->UndoMove();
 
-		if (quitEarly)
-			return 0;
+		if (quitEarly) return alpha;
 
 		if (eval > bestEval)
 		{
@@ -412,7 +407,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		alpha = std::max(alpha, eval);
 		if (alpha >= beta)
 		{
-			if (!MoveIsCapture(move, engine->GetBitboardBoard()) && (Pieces)GetPromotion(move) == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
+			if (!captureMove && (Pieces)GetPromotion(move) == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
 			{
 				if (killerMoves[ply][0] != move)
 				{
@@ -425,7 +420,17 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 				Piece movingPiece = engine->GetBoard()[from].GetPiece();
 				int pieceType = (int)movingPiece.GetType() - 1;
 
-				historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to] += depth * depth;
+				historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to] =
+					std::min(historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to] + depth * depth * 100, 32767);
+
+				// Countermove heuristic
+				if (ply > 0 && !moveLists[ply - 1].empty())
+				{
+					Move prev = moveLists[ply - 1][0];
+					int prevFrom = GetStart(prev);
+					int prevTo = GetEnd(prev);
+					counterMoves[(int)movingPiece.GetColor()][prevFrom][prevTo] = move;
+				}
 			}
 			break;
 		}
@@ -461,7 +466,7 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 		if (elapsed >= timePerTurn)
 		{
 			quitEarly = true;
-			return 0;
+			return alpha;
 		}
 	}
 
@@ -502,7 +507,7 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 		engine->UndoMove();
 
 		if (quitEarly)
-			return 0;
+			return alpha;
 
 		if (score >= beta)
 			return beta; // Cutoff

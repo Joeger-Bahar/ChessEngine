@@ -27,4 +27,6 @@ public:
 	static bool IsEmptyAt(int sq, const BitboardBoard& board);
 
 	static int TotalPieces(const BitboardBoard& board);
+
+	static bool IsPassedPawn(const Move move, Color movingColor, const BitboardBoard& board);
 };

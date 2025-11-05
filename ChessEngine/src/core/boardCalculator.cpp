@@ -77,6 +77,41 @@ int BoardCalculator::TotalPieces(const BitboardBoard& board)
 	return total;
 }
 
+bool BoardCalculator::IsPassedPawn(const Move move, Color movingColor, const BitboardBoard& board)
+{
+	// If piece is not a pawn, cannot be passed
+	if ((board.pieceBitboards[(int)movingColor][(int)Pieces::PAWN - 1] & (1ULL << GetStart(move))) == 0)
+		return false;
+
+
+	int toSq = GetEnd(move);
+	int toRow = ToRow(toSq);
+	int toCol = ToCol(toSq);
+
+	int direction = IsWhite(movingColor) ? -1 : 1; // white pawns go up
+	int startRow = toRow + direction;
+
+	Bitboard enemyPawns = board.pieceBitboards[(int)Opponent(movingColor)][(int)Pieces::PAWN - 1];
+
+	// Check current, left, and right files
+	for (int fileOffset = -1; fileOffset <= 1; ++fileOffset)
+	{
+		int file = toCol + fileOffset;
+		if (file < 0 || file > 7) continue;
+
+		// Build bitmask for all squares *ahead* of the pawn in this file
+		Bitboard mask = 0ULL;
+		for (int row = startRow; row >= 0 && row <= 7; row += direction)
+			mask |= (1ULL << (row * 8 + file));
+
+		// If any enemy pawn exists in that mask, not passed
+		if (enemyPawns & mask)
+			return false;
+	}
+
+	return true;
+}
+
 bool BoardCalculator::IsCastlingValid(bool kingside, const BitboardBoard& board)
 {
 	Color player = GameState::currentPlayer;

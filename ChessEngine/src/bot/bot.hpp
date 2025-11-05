@@ -32,17 +32,21 @@ private:
 	int ScoreMove(const Move move, int ply, bool onlyMVVLVA);
 	void OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove = Move());
 
+
 	TranspositionTable tt;
 	// [color][pieces][start square][end square]
 	int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
 	Engine* engine;
 	Color botColor;
+	// 
 	std::vector<Move> moveLists[MAX_PLY];
 	Move killerMoves[MAX_PLY][2];
+	Move counterMoves[2][64][64];
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;
-	int timePerTurn = 500; // In milliseconds
+	int extensionsThisSearch = 0;
+	int timePerTurn = 5000; // In milliseconds
 	bool quitEarly = false;
 	bool afterNullMove = false;
 };

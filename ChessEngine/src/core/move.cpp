@@ -49,6 +49,7 @@ bool MoveIsNull(Move m)
 		!IsEnPassant(m) && !IsCastle(m);
 }
 
+// MUST CALL BEFORE MOVE IS APPLIED
 bool MoveIsCapture(Move m, const BitboardBoard& board)
 {
 	int endSq = GetEnd(m);

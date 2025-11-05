@@ -3,6 +3,8 @@
 #include <vector>
 #include <cstdint>
 
+#include "move.hpp"
+
 enum TTFlag : uint8_t { TT_UNKNOWN = 0, TT_EXACT = 1, TT_ALPHA = 2, TT_BETA = 3 };
 
 struct TTEntry
@@ -31,4 +33,6 @@ struct TranspositionTable
     void Clear();
 
     void NewSearch();
+
+    Move GetBestMove(uint64_t key) const;
 };

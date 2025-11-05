@@ -9,15 +9,23 @@
 
 // TODO: Sometimes using uint8_t for moves has very weird memory bugs, like setting the move col to 204 in GetAllMoves
 // 
-// TODO: Tablebase
-// TODO: Move extension (check, recapture, passed pawn)
+// TODO: Move extension (check, recapture, passed pawn, pv line)
 // TODO: Aspiration window
-// TODO: Futility pruning & razoring
 // TODO: SEE for capture pruning (qsearch)
-// TODO: Countermove heuristic
 // TODO: Pawn hash (for eval of pawn positions)
 // TODO: ProbCut, Multi-Cut
 // TODO: Asymmetric search
+// TODO: Keep track of pv line
+// 
+// Eval order:
+// Bishop
+// Queens (pst)
+// General
+// Rooks
+// Knight
+// Pawn
+// King Safety
+// row col 0, 0 is a8
 
 int main()
 {
@@ -31,7 +39,7 @@ int main()
     const char* start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     const char* enMis = "7r/1Q3ppp/p7/2k4q/3PB3/8/1PP1NP2/1NB1KR2 w - - 1 24";
     const char* pawn = "K7/2P5/8/8/4pP2/8/5b2/k7 w - - 0 1";
-    GameState::uci = true; // Used for bot v. bot iteration testing
+    GameState::uci = false; // Used for bot v. bot iteration testing
     std::unique_ptr<Engine> chessEngine = std::make_unique<Engine>();
     // Smart ptr so I don't need delete at end of file (lazy)
 	std::unique_ptr<Bot> whiteBot = std::make_unique<Bot>(chessEngine.get(), Color::WHITE);
