@@ -341,7 +341,42 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			return beta; // Fail-hard beta cutoff
 	}
 
+	// Multi-cut pruning
+	if (depth >= 4 && !engine->InCheck(movingColor) && !followingNullMove && !GameState::endgame)
+	{
+		const int CUT_DEPTH = 2;     // Shallow depth for test searches
+		const int CUT_COUNT = 4;     // Number of moves to test
+		const int CUT_THRESHOLD = 3; // Number of beta cutoffs needed
+		int cutoffs = 0;
+
+		std::vector<Move> testMoves;
+		testMoves.reserve(256);
+		Movegen::GetAllMoves(testMoves, movingColor, engine->GetBitboardBoard(), engine);
+		OrderMoves(testMoves, ply, false);
+
+		int tested = 0;
+		for (const Move& m : testMoves)
+		{
+			if (tested++ >= CUT_COUNT) break;
+
+			engine->MakeMove(m);
+			if (engine->InCheck(movingColor))
+			{
+				engine->UndoMove();
+				continue;
+			}
+
+			int score = -Search(depth - 1 - CUT_DEPTH, ply + 1, -beta, -beta + 1);
+			engine->UndoMove();
+
+			if (quitEarly) return alpha;
+			if (score >= beta && ++cutoffs >= CUT_THRESHOLD)
+				return beta; // Prune entire node
+		}
+	}
+
 	std::vector<Move> pseudoMoves;
+	pseudoMoves.reserve(256);
 	Movegen::GetAllMoves(pseudoMoves, movingColor, engine->GetBitboardBoard(), engine);
 
 	std::vector<Move>& moves = moveLists[ply];
