@@ -322,6 +322,20 @@ int Eval(Color player, const Engine* engine)
 						if (isWhite) score += bishopPST[sq];
 						else         score -= bishopPST[Mirror(sq)];
 
+						// +30 if both colors of bishop are present
+						Bitboard bishops = board.pieceBitboards[color][(int)Pieces::BISHOP - 1];
+						Bitboard lightSquares = 0x55AA55AA55AA55AAULL; // Light square mask
+						Bitboard darkSquares = 0xAA55AA55AA55AA55ULL;  // Dark square mask
+						if ((bishops & lightSquares) && (bishops & darkSquares))
+						{
+							score += isWhite ? 30 : -30;
+						}
+						// -5 for every friendly pawn on the same color square as the bishop
+						//Bitboard pawns = board.pieceBitboards[color][(int)Pieces::PAWN - 1];
+						//Bitboard sameColorPawns = (IsSet(lightSquares, sq)) ? (pawns & lightSquares) : (pawns & darkSquares);
+						//int numSameColorPawns = __builtin_popcount(sameColorPawns);
+						//score += isWhite ? -5 * numSameColorPawns : 5 * numSameColorPawns;
+
 						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
 						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
 						//int mobility = __builtin_popcount(attacks);
