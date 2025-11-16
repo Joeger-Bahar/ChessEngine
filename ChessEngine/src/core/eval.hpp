@@ -15,4 +15,4 @@ extern int bishopPST[64];
 extern int rookPST[64];
 extern int queenPST[64];
 
-int Eval(Color player, const Square board[64]);
+int Eval(Color player, const Engine* engine);

@@ -130,7 +130,11 @@ std::vector<uint8_t> Movegen::GetValidMoves(int sq, const BitboardBoard& board)
 
 	// Now filter out moves that would put or leave the king in check
 	// Find king position
-	int kingSq = FirstLSBIndex(board.pieceBitboards[c][static_cast<int>(Pieces::KING) - 1]);
+	const int kingSq = FirstLSBIndex(board.pieceBitboards[c][static_cast<int>(Pieces::KING) - 1]);
+	if (kingSq == -1)
+	{
+		std::cout << "Color: " << c << '\n';
+	}
 
 	std::vector<uint8_t> validMoves;
 	Bitboard bb = movesMask;
@@ -151,6 +155,8 @@ std::vector<uint8_t> Movegen::GetValidMoves(int sq, const BitboardBoard& board)
 
 		// Update king square if moved
 		int kingSqNew = (piece.GetType() == Pieces::KING ? endSq : kingSq);
+
+		// This fails because if a white piece is getting moves, the white move can capture the black king
 
 		// Legality check
 		if (!IsSquareAttacked(kingSqNew, Opponent(color), temp))
@@ -255,6 +261,45 @@ std::vector<Move> Movegen::GetAllMoves(Color color, const BitboardBoard& board, 
 	std::vector<Move> moves;
 	GetAllMoves(moves, color, board, engine, onlyCaptures);
 	return moves;
+}
+
+Bitboard Movegen::GetPseudoAttacks(Pieces piece, int sq, const Bitboard& allOcc, bool isWhite)
+{
+	// TODO: Might need to fill in the pieces bitboards too for accurate movegen
+	Bitboard moves = EMPTY_BITBOARD;
+	Color color = isWhite ? Color::WHITE : Color::BLACK;
+	switch (piece)
+	{
+	case Pieces::PAWN:   moves = PawnMoves(sq, color, BitboardBoard{ {}, {}, allOcc }); break;
+	case Pieces::KNIGHT: moves = KnightMoves(sq, color, BitboardBoard{ {}, {}, allOcc }); break;
+	case Pieces::BISHOP: moves = SlidingMoves(sq, color, Pieces::BISHOP, BitboardBoard{ {}, {}, allOcc }); break;
+	case Pieces::ROOK:   moves = SlidingMoves(sq, color, Pieces::ROOK, BitboardBoard{ {}, {}, allOcc }); break;
+	case Pieces::QUEEN:  moves = SlidingMoves(sq, color, Pieces::QUEEN, BitboardBoard{ {}, {}, allOcc }); break;
+	case Pieces::KING:   moves = KingMoves(sq, color, BitboardBoard{ {}, {}, allOcc }); break;
+	default: break;
+	}
+	return moves;
+}
+
+const Bitboard(&Movegen::GetPawnAttacks())[2][64]
+{
+	return pawnAttacks;
+}
+const Bitboard(&Movegen::GetKnightAttacks())[64]
+{
+	return knightAttacks;
+}
+const Bitboard(&Movegen::GetKingAttacks())[64]
+{
+	return kingAttacks;
+}
+const Bitboard(&Movegen::GetRookAttacks())[64][4096]
+{
+	return rookAttacks;
+}
+const Bitboard(&Movegen::GetBishopAttacks())[64][512]
+{
+	return bishopAttacks;
 }
 
 Bitboard Movegen::KingMoves(int sq, Color color, const BitboardBoard& board)

@@ -40,7 +40,7 @@ public:
 	void CheckCheckmate();
 
 	const Square(&GetBoard() const)[64]{ return board; }
-	const BitboardBoard& GetBitboardBoard() { return bitboards; }
+	const BitboardBoard& GetBitboardBoard() const { return bitboards; }
 	const Color GetCurrentPlayer() const { return GameState::currentPlayer; }
 	const uint64_t GetZobristKey() { return zobristKey; }
 	std::string GetFEN() const; // Get current position in FEN notation

@@ -40,13 +40,14 @@ private:
 	Color botColor;
 	// 
 	std::vector<Move> moveLists[MAX_PLY];
+	std::vector<Move> qMoveLists[MAX_PLY];
 	Move killerMoves[MAX_PLY][2];
 	Move counterMoves[2][64][64];
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;
 	int extensionsThisSearch = 0;
-	int timePerTurn = 5000; // In milliseconds
+	int timePerTurn = 1500; // In milliseconds
 	bool quitEarly = false;
 	bool afterNullMove = false;
 };

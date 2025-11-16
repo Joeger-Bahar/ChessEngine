@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-static const uint64_t rookMagics[64] = {
+static constexpr uint64_t rookMagics[64] = {
   0x480088020400010,
   0x144000a004300040,
   0x1080200008801000,
@@ -68,7 +68,7 @@ static const uint64_t rookMagics[64] = {
   0x40488411022
 };
 
-static const uint64_t bishopMagics[64] = {
+static constexpr uint64_t bishopMagics[64] = {
   0x1005501008410040,
   0x420040080810800,
   0x31081085000000,
@@ -135,7 +135,7 @@ static const uint64_t bishopMagics[64] = {
   0x40880a04003420
 };
 
-static const int rookShifts[64] = {
+static constexpr int rookShifts[64] = {
   52,
   53,
   53,
@@ -202,7 +202,7 @@ static const int rookShifts[64] = {
   52
 };
 
-static const int bishopShifts[64] = {
+static constexpr int bishopShifts[64] = {
   58,
   59,
   59,

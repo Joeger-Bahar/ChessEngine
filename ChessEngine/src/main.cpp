@@ -13,7 +13,6 @@
 // TODO: Aspiration window
 // TODO: SEE for capture pruning (qsearch)
 // TODO: Pawn hash (for eval of pawn positions)
-// TODO: ProbCut, Multi-Cut
 // TODO: Asymmetric search
 // TODO: Keep track of pv line
 // 
@@ -26,6 +25,7 @@
 // Pawn
 // King Safety
 // row col 0, 0 is a8
+// TODO: King is gone
 
 int main()
 {

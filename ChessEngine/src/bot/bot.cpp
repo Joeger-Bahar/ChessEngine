@@ -277,7 +277,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	if (!pvNode && !engine->InCheck(GameState::currentPlayer))
 	{
-		int eval = Eval(GameState::currentPlayer, engine->GetBoard());
+		int eval = Eval(GameState::currentPlayer, engine);
 
 		// Razoring
 		const int RAZORING_MARGIN = 300;
@@ -342,7 +342,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	}
 
 	// Multi-cut pruning
-	if (depth >= 4 && !engine->InCheck(movingColor) && !followingNullMove && !GameState::endgame)
+	if (depth >= 5 && !engine->InCheck(movingColor) && !followingNullMove && !GameState::endgame)
 	{
 		const int CUT_DEPTH = 2;     // Shallow depth for test searches
 		const int CUT_COUNT = 4;     // Number of moves to test
@@ -350,23 +350,22 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		int cutoffs = 0;
 
 		std::vector<Move> testMoves;
-		testMoves.reserve(256);
-		Movegen::GetAllMoves(testMoves, movingColor, engine->GetBitboardBoard(), engine);
+		Movegen::GetAllMoves(testMoves, movingColor, engine->GetBitboardBoard(), engine, true);
 		OrderMoves(testMoves, ply, false);
 
 		int tested = 0;
-		for (const Move& m : testMoves)
+		for (const Move& move : testMoves)
 		{
 			if (tested++ >= CUT_COUNT) break;
 
-			engine->MakeMove(m);
-			if (engine->InCheck(movingColor))
+			engine->MakeMove(move);
+			if (engine->InCheck(movingColor)) // Moving color is assigned before makeMove is called
 			{
 				engine->UndoMove();
 				continue;
 			}
 
-			int score = -Search(depth - 1 - CUT_DEPTH, ply + 1, -beta, -beta + 1);
+			int score = -Search(depth - CUT_DEPTH - 1, ply + 1, -beta, -beta + 1);
 			engine->UndoMove();
 
 			if (quitEarly) return alpha;
@@ -505,11 +504,17 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 		}
 	}
 
-	int standPat = Eval(GameState::currentPlayer, engine->GetBoard());
+	int standPat = 0;
 
-	const int QSEARCH_PLY_MAX = 8;
-	if (ply >= QSEARCH_PLY_MAX)
-		return standPat;
+	//try
+	//{
+		standPat = Eval(GameState::currentPlayer, engine);
+	//}
+	//catch (...)
+	//{
+	//	engine->Render();
+	//	standPat = Eval(GameState::currentPlayer, engine);
+	//}
 
 	// Fail-hard beta cutoff
 	if (standPat >= beta)
@@ -526,7 +531,8 @@ int Bot::Qsearch(int alpha, int beta, int ply)
 	// Generate only "noisy" moves (captures, promotions, checks)
 	bool onlyNoisy = true;
 
-	std::vector<Move> moves = Movegen::GetAllMoves(movingColor, engine->GetBitboardBoard(), engine, onlyNoisy);
+	std::vector<Move> moves = qMoveLists[ply];
+	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine, onlyNoisy);
 	OrderMoves(moves, 0, true);
 
 	for (const Move& move : moves)

@@ -81,12 +81,13 @@ void Uci::HandlePosition(std::istringstream& iss)
     else if (token == "fen")
     {
         std::string fen;
-        std::string fen_part;
+        std::string fenPart;
         for (int i = 0; i < 6; ++i)
         {
-            lineSS >> fen_part;
-            fen += fen_part + " ";
+            lineSS >> fenPart;
+            fen += fenPart + " ";
         }
+
         engine->LoadPosition(fen);
         lineSS >> token; // "moves"
     }

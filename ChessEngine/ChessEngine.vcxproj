@@ -130,6 +130,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <AdditionalIncludeDirectories>C:\Users\Joeger\source\repos\ChessEngine\ChessEngine\include\Fathom\src;$(SolutionDir)ChessEngine\src;$(SolutionDir)ChessEngine\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
