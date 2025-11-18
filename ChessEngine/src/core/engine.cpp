@@ -288,7 +288,7 @@ bool Engine::StoreMove(Move& move)
 	}
 	if (click == -2)
 	{
-		UndoMove();
+		UndoTurn();
 		return false;
 	}
 	// Check if -1, and return
@@ -471,9 +471,13 @@ void Engine::MakeMove(const Move move)
 
 		// Update castling rights
 		if (IsWhite(currentPlayer))
+		{
 			whiteCastlingRights[0] = whiteCastlingRights[1] = false;
+		}
 		else
+		{
 			blackCastlingRights[0] = blackCastlingRights[1] = false;
+		}
 	}
 	else // Update rights if not castle
 		UpdateCastlingRights(move, movingPiece, targetPiece);

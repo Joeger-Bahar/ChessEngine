@@ -53,9 +53,15 @@ public:
 	inline const bool IsOver() const { return GameState::checkmate || GameState::draw; }
 	inline const bool InCheck(Color color) { return (GameState::checkStatus & (IsWhite(color) ? 0b10 : 0b01)) != 0; }
 	inline const bool IsCheckmate(Color color) { return GameState::checkmate && InCheck(color); }
+	inline const int GetKingPosition(Color color) const { return IsWhite(color) ? whiteKingPos : blackKingPos; }
 
 	int PieceToIndex(const Piece& p) const;
 	bool ValidMove(const Piece piece, const Move move); // Checks if the move is valid for the piece
+
+	float kingSafetyWeight = 0.25;
+	float pieceActivityWeight = 1.0;//0.35;
+	float materialWeight = 1.0;//0.40;
+
 private:
 	bool StoreMove(Move& move);   // Returns if there was a second click to make a move
 	void ProcessMove(Move& move); // Validates move

@@ -135,7 +135,10 @@ int Eval(Color player, const Engine* engine)
 {
 	const BitboardBoard& board = engine->GetBitboardBoard();
 
-	int score = 0;
+	int kingSafetyScore = 0;
+	int pieceActivityScore = 0;
+	int materialScore = 0;
+
 	const int pieceValues[] = { 0, 100, 320, 330, 500, 900, 100000 };
 
 	Bitboard whiteOcc = board.allPieces[0];
@@ -169,16 +172,16 @@ int Eval(Color player, const Engine* engine)
 					int mirroredSq = Mirror(sq);
 
 					if (isWhite)
-						score += value;
+						materialScore += value;
 					else
-						score -= value;
+						materialScore -= value;
 
 					switch (type)
 					{
 					case Pieces::PAWN:
 					{
-						if (isWhite) score += pawnPST[sq];
-						else         score -= pawnPST[mirroredSq];
+						if (isWhite) pieceActivityScore += pawnPST[sq];
+						else         pieceActivityScore -= pawnPST[mirroredSq];
 
 						int col = ToCol(sq);
 						int row = ToRow(sq);
@@ -193,46 +196,14 @@ int Eval(Color player, const Engine* engine)
 						// Doubled pawns
 						if (__builtin_popcount(sameFile) > 1)
 						{
-							score += isWhite ? -doubledPenalty : doubledPenalty;
+							pieceActivityScore += isWhite ? -doubledPenalty : doubledPenalty;
 						}
 
 						// Isolated pawns
 						if (adjFiles == 0ULL)
 						{
-							score += isWhite ? -isolatedPenalty : isolatedPenalty;
+							pieceActivityScore += isWhite ? -isolatedPenalty : isolatedPenalty;
 						}
-
-						// Backward pawns (simplified)
-						//if (isWhite)
-						//{
-						//	if (!(adjFiles & (RANK_MASK[row - 1] | RANK_MASK[row - 2])) && (col > 0 && col < 7))
-						//		score -= backwardPenalty;
-						//}
-						//else
-						//{
-						//	if (!(adjFiles & (RANK_MASK[row + 1] | RANK_MASK[row + 2])) && (col > 0 && col < 7))
-						//		score += backwardPenalty;
-						//}
-						//Bitboard inFrontMask = 0ULL;
-						//if (isWhite)
-						//{
-						//	for (int r = row + 1; r < 8; ++r)
-						//		inFrontMask |= (1ULL << ToIndex(r, col));
-						//}
-						//else
-						//{
-						//	for (int r = row - 1; r >= 0; --r)
-						//		inFrontMask |= (1ULL << ToIndex(r, col));
-						//}
-						//Bitboard enemyAttacks = 0ULL;
-						//if (col > 0)
-						//	enemyAttacks |= Movegen::GetPawnAttacks()[isWhite ? 1 : 0][sq - 1];
-						//if (col < 7)
-						//	enemyAttacks |= Movegen::GetPawnAttacks()[isWhite ? 1 : 0][sq + 1];
-						//if ((enemyAttacks & inFrontMask) && !(adjFiles & inFrontMask))
-						//{
-						//	score += isWhite ? -backwardPenalty : backwardPenalty;
-						//}
 
 						// Passed pawns
 						Bitboard blockingPawns = enemyPawns & (fileMask | leftMask | rightMask);
@@ -264,52 +235,15 @@ int Eval(Color player, const Engine* engine)
 							//	else if (row == 6) rankBonus = 60;
 							//}
 
-							score += isWhite ? passedBonus : -(passedBonus);
+							pieceActivityScore += isWhite ? passedBonus : -(passedBonus);
 						}
-
-						//// Pawn islands
-						//// (every island after the first costs 10 points)
-						//Bitboard pawns = board.pieceBitboards[color][(int)Pieces::PAWN - 1];
-						//int islands = 0;
-						//for (int f = 0; f < 8; ++f)
-						//{
-						//	Bitboard file = FILE_MASK[f];
-						//	if (pawns & file)
-						//	{
-						//		islands++;
-						//		// Skip to next non-empty file
-						//		while (f < 7 && !(pawns & FILE_MASK[f + 1]))
-						//			f++;
-						//	}
-						//}
-						//if (islands > 1)
-						//{
-						//	score += isWhite ? -(islands - 1) * islandPenalty : (islands - 1) * islandPenalty;
-						//}
-
-						//// Connected pawns
-						//Bitboard connected = 0ULL;
-						//if (col > 0)
-						//	connected |= leftMask;
-						//if (col < 7)
-						//	connected |= rightMask;
-						//if (connected & board.pieceBitboards[color][(int)Pieces::PAWN - 1])
-						//{
-						//	score += isWhite ? connectedPawnBonus : -connectedPawnBonus;
-						//}
-
-						//// Advanced pawns
-						//if ((isWhite && row <= 3) || (!isWhite && row >= 4))
-						//{
-						//	score += isWhite ? advancedPawnBonus : -advancedPawnBonus;
-						//}
 
 						break;
 					}
 					case Pieces::KNIGHT:
 					{
-						if (isWhite) score += knightPST[sq];
-						else         score -= knightPST[Mirror(sq)];
+						if (isWhite) pieceActivityScore += knightPST[sq];
+						else         pieceActivityScore -= knightPST[Mirror(sq)];
 
 						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
 						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
@@ -319,8 +253,8 @@ int Eval(Color player, const Engine* engine)
 					}
 					case Pieces::BISHOP:
 					{
-						if (isWhite) score += bishopPST[sq];
-						else         score -= bishopPST[Mirror(sq)];
+						if (isWhite) pieceActivityScore += bishopPST[sq];
+						else         pieceActivityScore -= bishopPST[Mirror(sq)];
 
 						// +30 if both colors of bishop are present
 						Bitboard bishops = board.pieceBitboards[color][(int)Pieces::BISHOP - 1];
@@ -328,7 +262,7 @@ int Eval(Color player, const Engine* engine)
 						Bitboard darkSquares = 0xAA55AA55AA55AA55ULL;  // Dark square mask
 						if ((bishops & lightSquares) && (bishops & darkSquares))
 						{
-							score += isWhite ? 30 : -30;
+							pieceActivityScore += isWhite ? 30 : -30;
 						}
 						// -5 for every friendly pawn on the same color square as the bishop
 						//Bitboard pawns = board.pieceBitboards[color][(int)Pieces::PAWN - 1];
@@ -344,8 +278,36 @@ int Eval(Color player, const Engine* engine)
 					}
 					case Pieces::ROOK:
 					{
-						if (isWhite) score += rookPST[sq];
-						else         score -= rookPST[Mirror(sq)];
+						if (isWhite) pieceActivityScore += rookPST[sq];
+						else         pieceActivityScore -= rookPST[Mirror(sq)];
+
+						// +25 if on open file, +15 if on semi-open file
+						int col = ToCol(sq);
+						Bitboard fileMask = FILE_MASK[col];
+						Bitboard friendlyPawns = board.pieceBitboards[color][(int)Pieces::PAWN - 1];
+						Bitboard enemyPawns = board.pieceBitboards[1 - color][(int)Pieces::PAWN - 1];
+						if ((friendlyPawns & fileMask) == 0ULL && (enemyPawns & fileMask) == 0ULL)
+						{
+							pieceActivityScore += isWhite ? 25 : -25;
+						}
+						else if ((friendlyPawns & fileMask) == 0ULL)
+						{
+							pieceActivityScore += isWhite ? 15 : -15;
+						}
+
+						// +25 if on same file as other rook
+						Bitboard rooks = board.pieceBitboards[color][(int)Pieces::ROOK - 1];
+						if (__builtin_popcount(rooks & fileMask) > 1)
+						{
+							pieceActivityScore += isWhite ? 25 : -25;
+						}
+
+						// +30 if on 7th rank
+						int row = ToRow(sq);
+						if ((isWhite && row == 1) || (!isWhite && row == 6))
+						{
+							pieceActivityScore += isWhite ? 30 : -30;
+						}
 
 						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
 						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
@@ -355,8 +317,8 @@ int Eval(Color player, const Engine* engine)
 					}
 					case Pieces::QUEEN:
 					{
-						if (isWhite) score += queenPST[sq];
-						else         score -= queenPST[Mirror(sq)];
+						if (isWhite) pieceActivityScore += queenPST[sq];
+						else         pieceActivityScore -= queenPST[Mirror(sq)];
 
 						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
 						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
@@ -384,13 +346,13 @@ int Eval(Color player, const Engine* engine)
 					case Pieces::KING:
 						if (!GameState::endgame)
 						{
-							if (isWhite) score += kingPST_mg[sq];
-							else		 score -= kingPST_mg[Mirror(sq)];
+							if (isWhite) pieceActivityScore += kingPST_mg[sq];
+							else		 pieceActivityScore -= kingPST_mg[Mirror(sq)];
 						}
 						else
 						{
-							if (isWhite) score += kingPST_eg[sq];
-							else		 score -= kingPST_eg[Mirror(sq)];
+							if (isWhite) pieceActivityScore += kingPST_eg[sq];
+							else		 pieceActivityScore -= kingPST_eg[Mirror(sq)];
 						}
 						break;
 					}
@@ -399,76 +361,9 @@ int Eval(Color player, const Engine* engine)
 		}
 	}
 
+	float score = ((float)materialScore * engine->materialWeight) + ((float)pieceActivityScore * engine->pieceActivityWeight);
+
 	if (player == Color::BLACK) score *= -1;
 
-	return score;
-}
-
-
-int GetStockfishEval(const std::string& stockfishPath, const std::string& fen) {
-	const char* tmpFilename = "stockfish_uci_eval.txt";
-	{
-		std::ofstream cmdFile(tmpFilename);
-		if (!cmdFile) throw std::runtime_error("Failed to create temp file.");
-		cmdFile << "position fen " << fen << std::endl;
-		cmdFile << "go depth 10" << std::endl; // You can adjust depth
-		cmdFile << "quit" << std::endl;
-	}
-	std::string command = "\"" + stockfishPath + "\" < " + tmpFilename;
-	std::string result;
-	std::array<char, 256> buffer;
-	std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), _pclose);
-	if (!pipe) throw std::runtime_error("Failed to start Stockfish process.");
-	while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-		result += buffer.data();
-	}
-	// Parse Stockfish output for "score cp N"
-	std::istringstream iss(result);
-	std::string line;
-	float eval = 0.f;
-	while (std::getline(iss, line)) {
-		size_t pos = line.find("score cp ");
-		if (pos != std::string::npos) {
-			std::string num = line.substr(pos + 9);
-			eval = std::stoi(num);
-			break;
-		}
-	}
-	return eval;
-}
-
-// Main comparison function
-void CompareEvalAccuracy(
-	const std::vector<std::string>& fens,
-	const std::string& stockfishPath,
-	int (*Eval1)(Color, const Engine*),
-	int (*Eval2)(Color, const Engine*)
-) {
-	double totalError1 = 0.0, totalError2 = 0.0;
-	int count = 0;
-	for (const auto& fen : fens) {
-		Engine engine(fen);
-		int sfEval = GetStockfishEval(stockfishPath, fen);
-		float eval1 = Eval1(engine.GetCurrentPlayer(), &engine) / 100.f;
-		float eval2 = Eval2(engine.GetCurrentPlayer(), &engine) / 100.f;
-
-		double error1 = std::abs(sfEval - eval1);
-		double error2 = std::abs(sfEval - eval2);
-
-		totalError1 += error1;
-		totalError2 += error2;
-		count++;
-
-		std::cout << "FEN: " << fen << "\n";
-		std::cout << "Stockfish: " << sfEval << " | Eval1: " << eval1 << " | Eval2: " << eval2 << "\n";
-		std::cout << "Error1: " << error1 << " | Error2: " << error2 << "\n\n";
-	}
-	std::cout << "Average Error Eval1: " << (totalError1 / count) << "\n";
-	std::cout << "Average Error Eval2: " << (totalError2 / count) << "\n";
-	if (totalError1 < totalError2)
-		std::cout << "Eval1 is more accurate on average.\n";
-	else if (totalError2 < totalError1)
-		std::cout << "Eval2 is more accurate on average.\n";
-	else
-		std::cout << "Both evals are equally accurate on average.\n";
+	return (int)score;
 }
