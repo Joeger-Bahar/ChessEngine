@@ -28,7 +28,7 @@ public:
 
 private:
 	int Search(int depth, int ply, int alpha, int beta);
-	int Qsearch(int alpha, int beta, int ply);
+	int Qsearch(int alpha, int beta, int ply, int qply = 0);
 	int ScoreMove(const Move move, int ply, bool onlyMVVLVA);
 	void OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove = Move());
 
@@ -41,6 +41,7 @@ private:
 	// 
 	std::vector<Move> moveLists[MAX_PLY];
 	std::vector<Move> qMoveLists[MAX_PLY];
+	Move previousMoves[MAX_PLY] = {};
 	Move killerMoves[MAX_PLY][2];
 	Move counterMoves[2][64][64];
 	// Start time of the search, used for time control

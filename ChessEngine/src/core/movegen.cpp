@@ -189,7 +189,7 @@ std::vector<Move> Movegen::GetAllLegalMoves(Color color, const BitboardBoard& bo
 }
 
 void Movegen::GetAllMoves(std::vector<Move>& moves, Color color, const BitboardBoard& board, Engine* engine,
-	bool onlyNoisy)
+	bool onlyNoisy, bool onlyCaptures)
 {
 	moves.clear();
 	int c = IsWhite(color) ? 0 : 1;
@@ -241,7 +241,10 @@ void Movegen::GetAllMoves(std::vector<Move>& moves, Color color, const BitboardB
 					if (MoveIsCapture(move, board))
 					{
 						moves.push_back(move);
+						continue;
 					}
+					if (onlyCaptures)
+						continue;
 
 					// Checks
 					engine->MakeMove(move);
