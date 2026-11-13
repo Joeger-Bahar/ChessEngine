@@ -49,6 +49,7 @@ public:
 	bool IsDraw() const;
 	bool IsThreefold() const;
 	bool HasRepeated() const;
+	bool IsRepetitionDraw(int ply) const; // For the search: see engine.cpp
 	bool Is50Move() const;
 	inline const bool IsOver() const { return GameState::checkmate || GameState::draw; }
 	inline const bool InCheck(Color color) { return (GameState::checkStatus & (IsWhite(color) ? 0b10 : 0b01)) != 0; }

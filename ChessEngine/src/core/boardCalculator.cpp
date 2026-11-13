@@ -112,9 +112,8 @@ bool BoardCalculator::IsPassedPawn(const Move move, Color movingColor, const Bit
 	return true;
 }
 
-bool BoardCalculator::IsCastlingValid(bool kingside, const BitboardBoard& board)
+bool BoardCalculator::IsCastlingValid(bool kingside, const BitboardBoard& board, Color player)
 {
-	Color player = GameState::currentPlayer;
 	Color enemy = Opponent(player);
 	int row = IsWhite(player) ? 7 : 0;
 

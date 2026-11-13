@@ -265,7 +265,7 @@ int Tablebase::ProbeWDL(Engine* engine) const
     struct pos pos0;
     struct pos* pos = &pos0;
     if (!parse_FEN(pos, fen.c_str()))
-        return false;
+        return -99;
 
     unsigned result = tb_probe_root(
         pos->white,
@@ -283,10 +283,9 @@ int Tablebase::ProbeWDL(Engine* engine) const
         NULL
     );
 
-    int wdl = TB_GET_WDL(result);
-
-	if (wdl == TB_RESULT_FAILED)
+	if (result == TB_RESULT_FAILED) // TB_GET_WDL is 0-15, so it could never equal TB_RESULT_FAILED
 		return -99;
+    int wdl = TB_GET_WDL(result);
 
 	if (wdl == TB_LOSS || wdl == TB_BLESSED_LOSS)
 		return -1;
@@ -294,6 +293,7 @@ int Tablebase::ProbeWDL(Engine* engine) const
 		return 0;
 	else if (wdl == TB_CURSED_WIN || wdl == TB_WIN)
 		return +1;
+	return -99;
 }
 
 int Tablebase::ProbeDTZ(Engine* engine) const
@@ -302,7 +302,7 @@ int Tablebase::ProbeDTZ(Engine* engine) const
     struct pos pos0;
     struct pos* pos = &pos0;
     if (!parse_FEN(pos, fen.c_str()))
-        return false;
+        return -99;
 
 	unsigned result = tb_probe_root(
 		pos->white,
@@ -320,6 +320,8 @@ int Tablebase::ProbeDTZ(Engine* engine) const
 		NULL
 	);
 
+    if (result == TB_RESULT_FAILED)
+        return -99;
     int dtz = TB_GET_DTZ(result);
 
 	if (dtz == 0)
@@ -334,7 +336,7 @@ Move Tablebase::GetMove(Engine* engine) const
     struct pos pos0;
     struct pos* pos = &pos0;
     if (!parse_FEN(pos, fen.c_str()))
-        return false;
+        return Move();
 
     // TB_GET_FROM, TB_GET_TO, TB_GET_PROMOTES, TB_GET_EP
     unsigned result = tb_probe_root(
@@ -353,6 +355,11 @@ Move Tablebase::GetMove(Engine* engine) const
         NULL
     );
 
+    // Castling rights (tb_probe_root refuses them), a missing table, or mate/stalemate: no move.
+    // Decoding TB_RESULT_FAILED gave "h8h8", which was played. The caller falls back to search.
+    if (result == TB_RESULT_FAILED || result == TB_RESULT_CHECKMATE || result == TB_RESULT_STALEMATE)
+        return Move();
+
     int from = TB_GET_FROM(result);
     int to = TB_GET_TO(result);
     int promo = TB_GET_PROMOTES(result);
@@ -364,6 +371,6 @@ Move Tablebase::GetMove(Engine* engine) const
 	else if (promo == TB_PROMOTES_BISHOP) parsedPromo = (int)Pieces::BISHOP;
 	else if (promo == TB_PROMOTES_KNIGHT) parsedPromo = (int)Pieces::KNIGHT;
 
-    Move m = EncodeMove(flipSquareVertical(from), flipSquareVertical(to), parsedPromo, false, false);
+    Move m = EncodeMove(flipSquareVertical(from), flipSquareVertical(to), parsedPromo, ep != 0, false);
     return m;
 }

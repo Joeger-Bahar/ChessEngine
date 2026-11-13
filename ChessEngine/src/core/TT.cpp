@@ -81,6 +81,10 @@ void TranspositionTable::ttStore(uint64_t key, int depth, int score, uint32_t mo
 
     if (replace)
     {
+        // A fail-low search has no best move: keep the one already stored for this position
+        if (move32 == 0 && e.key == key)
+            move32 = e.move32;
+
         e.key = key;
         e.depth = depth;
         e.score = score;

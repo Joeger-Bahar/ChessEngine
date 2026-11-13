@@ -20,7 +20,7 @@ class Engine;
 class BoardCalculator
 {
 public:
-	static bool IsCastlingValid(bool kingside, const BitboardBoard& board);
+	static bool IsCastlingValid(bool kingside, const BitboardBoard& board, Color player);
 
 	static bool GetPieceAt(int sq, const BitboardBoard& board, Piece& piece);
 	static uint8_t FindPiece(Piece piece, const BitboardBoard& board);

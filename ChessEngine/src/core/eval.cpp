@@ -6,6 +6,8 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
+#include <bit>
 
 #include "movegen.hpp"
 #include "boardCalculator.hpp"
@@ -157,6 +159,15 @@ int Eval(Color player, const Engine* engine)
 	// Mobility scaling
 	//const int mobilityBonus = 5; // per legal square
 
+	// Game phase from remaining material (24 = all pieces, 0 = bare kings), used to blend the king
+	// tables. GameState::endgame can't be used: it is never updated in UCI mode and never reset.
+	const int phaseWeights[6] = { 0, 1, 1, 2, 4, 0 };
+	int phase = 0;
+	for (int c = 0; c < 2; ++c)
+		for (int t = 0; t < 6; ++t)
+			phase += std::popcount(board.pieceBitboards[c][t]) * phaseWeights[t];
+	phase = std::min(phase, 24);
+
 	// TODO: Make this more cache friendly, like sq on the inside loop
 	for (int sq = 0; sq < 64; ++sq)
 	{
@@ -194,7 +205,7 @@ int Eval(Color player, const Engine* engine)
 						Bitboard enemyPawns = board.pieceBitboards[1 - color][(int)Pieces::PAWN - 1];
 
 						// Doubled pawns
-						if (__builtin_popcount(sameFile) > 1)
+						if (std::popcount(sameFile) > 1) // Must count all 64 bits: __popcnt only sees ranks 8-5
 						{
 							pieceActivityScore += isWhite ? -doubledPenalty : doubledPenalty;
 						}
@@ -208,15 +219,16 @@ int Eval(Color player, const Engine* engine)
 						// Passed pawns
 						Bitboard blockingPawns = enemyPawns & (fileMask | leftMask | rightMask);
 						Bitboard inFrontEnemyPawns = 0ULL;
+						// Every square ahead on this file and both neighbouring files (it used to be this file only)
 						if (isWhite)
 						{
 							for (int r = row - 1; r >= 0; --r)
-								inFrontEnemyPawns |= (1ULL << ToIndex(r, col));
+								inFrontEnemyPawns |= (0xFFULL << (8 * r));
 						}
 						else
 						{
 							for (int r = row + 1; r < 8; ++r)
-								inFrontEnemyPawns |= (1ULL << ToIndex(r, col));
+								inFrontEnemyPawns |= (0xFFULL << (8 * r));
 						}
 						if ((blockingPawns & inFrontEnemyPawns) == 0ULL)
 						{
@@ -297,7 +309,7 @@ int Eval(Color player, const Engine* engine)
 
 						// +25 if on same file as other rook
 						Bitboard rooks = board.pieceBitboards[color][(int)Pieces::ROOK - 1];
-						if (__builtin_popcount(rooks & fileMask) > 1)
+						if (std::popcount(rooks & fileMask) > 1)
 						{
 							pieceActivityScore += isWhite ? 25 : -25;
 						}
@@ -344,17 +356,12 @@ int Eval(Color player, const Engine* engine)
 					//	else         score -= queenPST[mirroredSq];
 					//	break;
 					case Pieces::KING:
-						if (!GameState::endgame)
-						{
-							if (isWhite) pieceActivityScore += kingPST_mg[sq];
-							else		 pieceActivityScore -= kingPST_mg[Mirror(sq)];
-						}
-						else
-						{
-							if (isWhite) pieceActivityScore += kingPST_eg[sq];
-							else		 pieceActivityScore -= kingPST_eg[Mirror(sq)];
-						}
+					{
+						int kingSq = isWhite ? sq : Mirror(sq);
+						int kingScore = (kingPST_mg[kingSq] * phase + kingPST_eg[kingSq] * (24 - phase)) / 24;
+						pieceActivityScore += isWhite ? kingScore : -kingScore;
 						break;
+					}
 					}
 				}
 			}

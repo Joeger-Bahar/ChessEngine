@@ -30,16 +30,8 @@ Engine::~Engine() {}
 
 void Engine::Init(std::string fen)
 {
-	LoadPosition(fen);
-	AppendUndoList(BoardState(), Move());
-
-	positionStack.clear();
-	positionCounts.clear();
-	uint64_t startKey = GetZobristKey();
-	positionStack.push_back(startKey);
-	positionCounts[startKey] = 1;
-
-	Movegen::InitPrecomputedAttacks();
+	Movegen::InitPrecomputedAttacks(); // Before LoadPosition, which uses the attack tables to detect check
+	LoadPosition(fen);                 // Also resets the undo and repetition history
 }
 
 void Engine::Reset()
@@ -340,7 +332,7 @@ bool Engine::StoreMove(Move& move)
 		if (board[firstClick].GetPiece().GetType() == Pieces::KING &&
 			abs(firstClick - click) == 2 && ToRow(firstClick) == row) // Same row, 2 columns apart (col1 - col2 = sq1 - sq2)
 		{
-			if (!BoardCalculator::IsCastlingValid(col == 6, bitboards) || InCheck(currentPlayer))
+			if (!BoardCalculator::IsCastlingValid(col == 6, bitboards, currentPlayer) || InCheck(currentPlayer))
 			{
 				firstClick = -1; // Reset for next move
 				return false; // Move ready to process
@@ -500,9 +492,9 @@ void Engine::MakeMove(const Move move)
 	// 6. Update halfmove clock etc.
 	if (movingPiece.GetType() == Pieces::PAWN || targetPiece.GetType() != Pieces::NONE)
 		halfmoves = 0;
-	else if (currentPlayer == Color::BLACK)
-		halfmoves++;
-	if (halfmoves >= 50) draw = true;
+	else
+		halfmoves++; // Counts plies (it used to count only Black's moves)
+	if (halfmoves >= 100) draw = true;
 
 	// 7. Save moveHistory (you already do)
 	moveHistory.push_back(move);
@@ -528,8 +520,7 @@ void Engine::MakeMove(const Move move)
 
 	// --- Finally, flip side-to-move in engine state and in the hash consistently ---
 	ChangePlayers(); // Flips currentPlayer
-	if (IsWhite(currentPlayer))
-		zobristKey ^= zobrist.sideToMove;
+	zobristKey ^= zobrist.sideToMove; // Every ply. Hashing it only when White was to move left the key unchanged by a White null move
 
 	// Update check
 	CheckKingInCheck();
@@ -558,9 +549,23 @@ bool Engine::HasRepeated() const
 	return (it != positionCounts.end() && it->second >= 2);
 }
 
+// Repetition as the search should see it. A position that already occurred after the search
+// root (fewer than `ply` plies ago) is a draw, since the side that repeated can repeat again.
+// A position that only repeats the game before the root must occur a third time, as in the real game.
+bool Engine::IsRepetitionDraw(int ply) const
+{
+	if (IsThreefold()) return true;
+	int last = static_cast<int>(positionStack.size()) - 1;
+	int limit = min(ply - 1, halfmoves); // Nothing repeats across a capture or pawn move
+	for (int back = 4; back <= limit; back += 2)
+		if (positionStack[last - back] == positionStack[last])
+			return true;
+	return false;
+}
+
 bool Engine::Is50Move() const
 {
-	return (halfmoves >= 50);
+	return (halfmoves >= 100);
 }
 
 bool Engine::ValidMove(const Piece piece, const Move move)
@@ -710,7 +715,7 @@ void Engine::LoadPosition(std::string fen)
 	moveHistory.clear();
 	undoHistory.clear();
 	if (enPassant != "-")
-		enPassantTarget = ToIndex(ToRow(7 - (enPassant[1] - '0')), ToCol(enPassant[0] - 'a'));
+		enPassantTarget = ToIndex(8 - (enPassant[1] - '0'), enPassant[0] - 'a'); // ToRow/ToCol take square indices
 	else
 		enPassantTarget = -1;
 
@@ -720,6 +725,18 @@ void Engine::LoadPosition(std::string fen)
 
 	zobristKey = ComputeFullHash();
 	CheckKingInCheck();
+
+	// Start a fresh history for the new position. UndoMove refuses to pop the first entry,
+	// so without this sentinel the first undo in a search from a freshly loaded position
+	// (UCI "position startpos" / "position fen ..." with no moves) silently did nothing.
+	AppendUndoList(BoardState(), Move());
+
+	// Repetition counts from a previous position must not leak into this one
+	// (UCI resends the whole game with every "position" command).
+	positionStack.clear();
+	positionCounts.clear();
+	positionStack.push_back(zobristKey);
+	positionCounts[zobristKey] = 1;
 }
 
 void Engine::AppendUndoList(BoardState state, const Move move)
@@ -874,11 +891,10 @@ void Engine::MakeNullMove()
 
 	halfmoves++;
 
-	if (halfmoves >= 50) { draw = true; }
+	if (halfmoves >= 100) { draw = true; }
 
 	ChangePlayers();
-	if (IsWhite(currentPlayer))
-		zobristKey ^= zobrist.sideToMove;
+	zobristKey ^= zobrist.sideToMove;
 
 	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
 	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];

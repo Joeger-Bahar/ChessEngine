@@ -151,6 +151,9 @@ std::vector<uint8_t> Movegen::GetValidMoves(int sq, const BitboardBoard& board)
 		temp.Remove(piece, sq);
 		if (captured.GetType() != Pieces::NONE)
 			temp.Remove(captured, endSq);
+		// En passant: the captured pawn is behind the target square (it may be the piece giving check)
+		else if (piece.GetType() == Pieces::PAWN && ToCol(endSq) != ToCol(sq))
+			temp.Remove(Piece(Pieces::PAWN, Opponent(color)), endSq + (IsWhite(color) ? 8 : -8));
 		temp.Add(piece, endSq);
 
 		// Update king square if moved
@@ -309,9 +312,9 @@ Bitboard Movegen::KingMoves(int sq, Color color, const BitboardBoard& board)
 {
 	Bitboard moves = kingAttacks[sq] & ~board.allPieces[(int)color];
 
-	if (BoardCalculator::IsCastlingValid(true, board)) // Kingside
+	if (BoardCalculator::IsCastlingValid(true, board, color)) // Kingside
 		Set(moves, ToIndex(ToRow(sq), ToCol(sq) + 2));
-	if (BoardCalculator::IsCastlingValid(false, board)) // Queenside
+	if (BoardCalculator::IsCastlingValid(false, board, color)) // Queenside
 		Set(moves, ToIndex(ToRow(sq), ToCol(sq) - 2));
 
 	return moves;
