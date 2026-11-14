@@ -44,6 +44,12 @@ Bot::Bot(Engine* engine, Color color)
 
 	for (int i = 0; i < MAX_PLY; ++i)
 		moveLists[i].clear();
+
+	// Fill LMR table with values
+	for (int d = 0; d < 64; ++d)
+		for (int m = 0; m < 64; ++m)
+			// Deeper move and deeper depth = bigger reduction
+			lmrTable[d][m] = (d == 0 || m == 0) ? 0 : int(0.75 + std::log(d) * std::log(m) / 2.25); // Standard, tuned magic numbers
 }
 
 int PieceValue(Piece piece)
@@ -215,19 +221,21 @@ Move Bot::GetMove()
 			++moveCount;
 			previousMoves[1] = move;
 
-			// PVS assuming really good ordering
-			//int score;
-			//if (moveCount == 1)
-			//{
-			int score = -Search(depth - 1, 1, -beta, -alpha);
-			//}
-			//else
-			//{
-			//	score = -Search(depth - 1, 1, -alpha - 1, -alpha);
-			//	if (!quitEarly && score > alpha && score < beta)
-			//		// Better move found, full window search
-			//		score = -Search(depth - 1, 1, -beta, -alpha);
-			//}
+			// Principal variation search: the first move (the previous best) gets the full window.
+			// Every later move is only checked against a null window (alpha, alpha + 1), which is
+			// much cheaper and answers "is this better than alpha?". Only if it is, search it again
+			// with the full window to get its exact score.
+			int score;
+			if (moveCount == 1)
+			{
+				score = -Search(depth - 1, 1, -beta, -alpha);
+			}
+			else
+			{
+				score = -Search(depth - 1, 1, -alpha - 1, -alpha);
+				if (!quitEarly && score > alpha && score < beta)
+					score = -Search(depth - 1, 1, -beta, -alpha);
+			}
 
 			engine->UndoMove();
 
@@ -319,12 +327,13 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	bool followingNullMove = afterNullMove; // Used for this search only
 	afterNullMove = false;
 	bool pvNode = (beta - alpha) > 1;
+	bool inCheck = engine->InCheck(GameState::currentPlayer);
 
 	if (engine->IsDraw() || engine->IsRepetitionDraw(ply)) return 0;
 
 	if (depth <= 0 || engine->IsOver()) return Qsearch(alpha, beta, ply);
 
-	if (!pvNode && !engine->InCheck(GameState::currentPlayer))
+	if (!pvNode && !inCheck)
 	{
 		int eval = Eval(GameState::currentPlayer, engine);
 
@@ -333,7 +342,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		if (depth <= 2 && !followingNullMove &&
 			(eval + (RAZORING_MARGIN * depth) < alpha))
 		{
-			int qEval = Qsearch(alpha, beta, ply); // Same position, so same ply
+			int qEval = Qsearch(alpha - 1, alpha, ply); // Same position, so same ply
 			if (qEval < alpha) return qEval;
 		}
 
@@ -342,7 +351,9 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	uint64_t key = engine->GetZobristKey();
 	int ttScore = 0;
 	uint32_t ttMove = 0; // ttProbe only writes these on a key match
-	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove))
+	// No TT cutoffs in PV nodes: they would cut the principal variation short. The probe still
+	// runs so the stored move can be searched first.
+	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode)
 		return ScoreFromTT(ttScore, ply);
 
 	Color movingColor = GameState::currentPlayer;
@@ -456,17 +467,43 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		previousMoves[ply + 1] = move;
 
-		//if (moveCount == 1)
-		//{
-		eval = -Search(newDepth, ply + 1, -beta, -alpha);
-		//}
-		//else
-		//{
-		//	eval = -Search(newDepth, ply + 1, -alpha - 1, -alpha);
+		// Reduce if move is 4+, depth is 3+, not in check, not opponent in check,
+		// not capture move, not killer move, not history best, and not promotion
+		// Further reduction is move is 8+ and depth is 6+
+		int reduction = 0;
+		if (moveCount > (pvNode ? 2 : 1) && depth >= 3 && !inCheck &&
+			!captureMove && GetPromotion(move) == (int)Pieces::NONE)
+		{
+			// Get fine tuned adjustment
+			reduction = lmrTable[std::min(depth, 63)][std::min(moveCount, 63)];
 
-		//	if (!quitEarly && eval > alpha && eval < beta)
-		//		eval = -Search(newDepth, ply + 1, -beta, -alpha);
-		//}
+			// Tuned adjustments
+			if (!pvNode)         reduction++;
+			if (opponentInCheck) reduction--;
+			if (isKillerMove)    reduction--;
+
+			// Stop from jumping into qsearch
+			reduction = std::clamp(reduction, 0, newDepth - 1);
+		}
+
+		// Principal variation search (see GetMove). In a non-PV node the window is already
+		// (alpha, alpha + 1), so the re-search condition can never be true there.
+		if (moveCount == 1)
+		{
+			eval = -Search(newDepth, ply + 1, -beta, -alpha);
+		}
+		else
+		{
+			eval = -Search(newDepth - reduction, ply + 1, -alpha - 1, -alpha);
+
+			// Research, still null window
+			if (!quitEarly && reduction > 0 && eval > alpha)
+				eval = -Search(newDepth, ply + 1, -alpha - 1, -alpha);
+
+			// Full PV research
+			if (!quitEarly && eval > alpha && eval < beta)
+				eval = -Search(newDepth, ply + 1, -beta, -alpha);
+		}
 
 		engine->UndoMove();
 
@@ -551,12 +588,15 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	if (engine->IsDraw())
 		return 0;
 
+	int bestScore = -INF;
+
 	bool inCheck = engine->InCheck(movingColor);
 	if (!inCheck)
 	{
 		int standPat = Eval(movingColor, engine);
 		if (standPat >= beta)
-			return beta;
+			return standPat;
+		bestScore = standPat;
 		if (standPat > alpha)
 			alpha = standPat;
 	}
@@ -585,7 +625,9 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 			return alpha;
 
 		if (score >= beta)
-			return beta; // Cutoff
+			return score; // Cutoff
+
+		if (score > bestScore) bestScore = score;
 
 		if (score > alpha)
 			alpha = score;
@@ -594,5 +636,5 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	if (inCheck && !foundLegal)
 		return -(MATE_VAL - ply);
 
-	return alpha;
+	return bestScore;
 }
