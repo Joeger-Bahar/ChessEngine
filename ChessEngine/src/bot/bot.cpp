@@ -17,6 +17,7 @@ using namespace std::chrono;
 
 constexpr int INF = std::numeric_limits<int>::max() / 4;
 constexpr int MATE_VAL = 1000000;
+constexpr int NO_EVAL = -99999;
 
 static int ScoreToTT(int score, int ply)
 {
@@ -139,7 +140,6 @@ void Bot::Clear()
 
 	nodesSearched = 0;
 	quitEarly = false;
-	afterNullMove = false;
 	memset(previousMoves, 0, sizeof(previousMoves));
 
 	memset(counterMoves, 0, sizeof(counterMoves));
@@ -164,7 +164,6 @@ Move Bot::GetMove()
 	}
 
 	quitEarly = false;
-	afterNullMove = false;
 	memset(previousMoves, 0, sizeof(previousMoves));
 	startTime = steady_clock::now();
 	tt.NewSearch(); // age TT entries for this root search
@@ -178,6 +177,13 @@ Move Bot::GetMove()
 			for (int x = 0; x < 64; ++x)
 				for (int y = 0; y < 64; ++y)
 					historyHeuristic[i][j][x][y] /= 2;
+
+	// Clear search stack
+	for (SearchStackEntry& se : searchStack)
+	{
+		se = SearchStackEntry();
+		se.staticEval = NO_EVAL;   // "unknown" for the spare entries and the root
+	}
 
 	int maxDepth = 8;
 	Move bestMove = Move();
@@ -221,10 +227,7 @@ Move Bot::GetMove()
 			++moveCount;
 			previousMoves[1] = move;
 
-			// Principal variation search: the first move (the previous best) gets the full window.
-			// Every later move is only checked against a null window (alpha, alpha + 1), which is
-			// much cheaper and answers "is this better than alpha?". Only if it is, search it again
-			// with the full window to get its exact score.
+			// PVS, assuming good move ordering
 			int score;
 			if (moveCount == 1)
 			{
@@ -233,7 +236,7 @@ Move Bot::GetMove()
 			else
 			{
 				score = -Search(depth - 1, 1, -alpha - 1, -alpha);
-				if (!quitEarly && score > alpha && score < beta)
+				if (!quitEarly && score > alpha && score < beta) // Move was good, full research
 					score = -Search(depth - 1, 1, -beta, -alpha);
 			}
 
@@ -323,11 +326,18 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			return alpha;
 		}
 	}
+	Color movingColor = GameState::currentPlayer;
 
-	bool followingNullMove = afterNullMove; // Used for this search only
-	afterNullMove = false;
+	// +4 for buffer so we never need to worry about indexing
+	SearchStackEntry* ss = &searchStack[ply + 4];
+
+	bool followingNullMove = (ss-1)->nullMove; // Used for this search only
 	bool pvNode = (beta - alpha) > 1;
-	bool inCheck = engine->InCheck(GameState::currentPlayer);
+	bool inCheck = engine->InCheck(movingColor);
+	int staticEval = inCheck ? NO_EVAL : Eval(movingColor, engine);
+	ss->staticEval = staticEval;
+	// If the eval has improved since our last term. Used for more aggressive pruning
+	bool improving = !inCheck && (ss - 2)->staticEval != NO_EVAL && staticEval > (ss - 2)->staticEval;
 
 	if (engine->IsDraw() || engine->IsRepetitionDraw(ply)) return 0;
 
@@ -335,12 +345,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	if (!pvNode && !inCheck)
 	{
-		int eval = Eval(GameState::currentPlayer, engine);
-
 		// Razoring
 		const int RAZORING_MARGIN = 300;
 		if (depth <= 2 && !followingNullMove &&
-			(eval + (RAZORING_MARGIN * depth) < alpha))
+			(staticEval + (RAZORING_MARGIN * depth) < alpha))
 		{
 			int qEval = Qsearch(alpha - 1, alpha, ply); // Same position, so same ply
 			if (qEval < alpha) return qEval;
@@ -356,31 +364,40 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode)
 		return ScoreFromTT(ttScore, ply);
 
-	Color movingColor = GameState::currentPlayer;
 	bool foundLegal = false;
 
-	// Null move reduction. GameState::endgame is only updated by the GUI loop (never in UCI),
-	// so also require a queen on the board to keep null moves out of zugzwang-prone endings.
+	// Null move reduction
 	const BitboardBoard& board = engine->GetBitboardBoard();
-	bool hasQueens = (board.pieceBitboards[0][static_cast<int>(Pieces::QUEEN) - 1] |
-		board.pieceBitboards[1][static_cast<int>(Pieces::QUEEN) - 1]) != 0;
-	if (depth >= 3 && !engine->InCheck(movingColor) && hasQueens && !GameState::endgame && !followingNullMove)
+	// Most zugzwang happens in pawn-king endgames, so avoid that
+	int c = IsWhite(movingColor) ? 0 : 1;
+	bool hasNonPawn = (board.pieceBitboards[c][(int)Pieces::KNIGHT - 1] |
+					  board.pieceBitboards[c][(int)Pieces::BISHOP - 1] |
+					  board.pieceBitboards[c][(int)Pieces::ROOK - 1] |
+					  board.pieceBitboards[c][(int)Pieces::QUEEN - 1]) != 0;
+
+	if (depth >= 3 && !pvNode && !inCheck && hasNonPawn && staticEval >= beta && !(ss-1)->nullMove)
 	{
-		int reduction = 3;
+		// Adaptive reduction
+		int reduction = 2 + depth / 4 + std::min((staticEval - beta) / 200, 2);
+
+		ss->nullMove = true;
+		ss->move = 0;
+		ss->pieceIndex = -1;
+
 		engine->MakeNullMove();
-		afterNullMove = true;
 		previousMoves[ply + 1] = Move();
-		int nullScore = -Search(std::max(0, depth - 1 - reduction), ply + 1, -beta, -beta + 1);
+		int nullScore = -Search(depth - reduction, ply + 1, -beta, -beta + 1);
 		engine->UndoNullMove();
 
+		ss->nullMove = false;
 		if (quitEarly) return alpha;
 
 		if (nullScore >= beta)
-			return beta; // Fail-hard beta cutoff
+			return nullScore >= MATE_VAL - MAX_PLY ? beta : nullScore; // Fail-hard beta cutoff
 	}
 
 	// Multi-cut pruning
-	if (depth >= 5 && !engine->InCheck(movingColor) && !followingNullMove && !GameState::endgame)
+	if (depth >= 5 && !inCheck && !followingNullMove && !GameState::endgame)
 	{
 		const int CUT_DEPTH = 2;     // Shallow depth for test searches
 		const int CUT_COUNT = 4;     // Number of moves to test
@@ -470,21 +487,22 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		// Reduce if move is 4+, depth is 3+, not in check, not opponent in check,
 		// not capture move, not killer move, not history best, and not promotion
 		// Further reduction is move is 8+ and depth is 6+
-		int reduction = 0;
-		if (moveCount > (pvNode ? 2 : 1) && depth >= 3 && !inCheck &&
-			!captureMove && GetPromotion(move) == (int)Pieces::NONE)
-		{
-			// Get fine tuned adjustment
-			reduction = lmrTable[std::min(depth, 63)][std::min(moveCount, 63)];
+			int reduction = 0;
+			if (moveCount > (pvNode ? 2 : 1) && depth >= 3 && !inCheck &&
+				!captureMove && GetPromotion(move) == (int)Pieces::NONE)
+			{
+				// Get fine tuned adjustment
+				reduction = lmrTable[std::min(depth, 63)][std::min(moveCount, 63)];
 
-			// Tuned adjustments
-			if (!pvNode)         reduction++;
-			if (opponentInCheck) reduction--;
-			if (isKillerMove)    reduction--;
+				// Tuned adjustments
+				if (!pvNode)         reduction++;
+				if (!improving)		 reduction++;
+				if (opponentInCheck) reduction--;
+				if (isKillerMove)    reduction--;
 
-			// Stop from jumping into qsearch
-			reduction = std::clamp(reduction, 0, newDepth - 1);
-		}
+				// Stop from jumping into qsearch
+				reduction = std::clamp(reduction, 0, newDepth - 1);
+			}
 
 		// Principal variation search (see GetMove). In a non-PV node the window is already
 		// (alpha, alpha + 1), so the re-search condition can never be true there.

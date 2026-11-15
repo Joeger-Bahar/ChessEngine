@@ -15,6 +15,15 @@
 #define MAX_PLY 128
 #define NUM_PIECES 6
 
+struct SearchStackEntry
+{
+	Move move = 0;
+	int pieceIndex = -1; // color*6 + (type-1), -1 for null move
+	int staticEval = 0;
+	bool inCheck = false;
+	bool nullMove = false;
+};
+
 class Bot
 {
 public:
@@ -41,6 +50,7 @@ private:
 	// 
 	std::vector<Move> moveLists[MAX_PLY];
 	std::vector<Move> qMoveLists[MAX_PLY];
+	SearchStackEntry searchStack[MAX_PLY + 8];
 	Move previousMoves[MAX_PLY] = {};
 	Move killerMoves[MAX_PLY][2];
 	Move counterMoves[2][64][64];
@@ -51,5 +61,4 @@ private:
 	int extensionsThisSearch = 0;
 	int timePerTurn = 12000; // In milliseconds
 	bool quitEarly = false;
-	bool afterNullMove = false;
 };

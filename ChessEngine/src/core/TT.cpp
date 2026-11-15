@@ -10,6 +10,7 @@ void TranspositionTable::NewSearch()
     // increment age at each root search
     currentAge++; if (currentAge == 0) currentAge = 1;
 }
+
 Move TranspositionTable::GetBestMove(uint64_t key) const
 {
     size_t idx = IndexFor(key);
@@ -18,7 +19,6 @@ Move TranspositionTable::GetBestMove(uint64_t key) const
         return static_cast<Move>(e.move32);
     return Move(); // null move if none
 }
-
 
 TranspositionTable::TranspositionTable(int megabytes)
 {
