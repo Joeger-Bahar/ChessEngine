@@ -361,10 +361,17 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	uint32_t ttMove = 0; // ttProbe only writes these on a key match
 	// No TT cutoffs in PV nodes: they would cut the principal variation short. The probe still
 	// runs so the stored move can be searched first.
+	// TODO: Use this score instead of staticEval
 	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode)
 		return ScoreFromTT(ttScore, ply);
 
-	bool foundLegal = false;
+	// Reverse futility pruning
+	int RFP_MARGIN = 80; // 80 centipawns to assume to opponent can't recover
+	if (!pvNode && !inCheck && depth <= 7
+		&& staticEval - RFP_MARGIN * std::max(0, depth - improving) >= beta
+		&& staticEval < MATE_VAL - MAX_PLY)
+		return (staticEval + beta) / 2; // Blend to be a bit safer
+
 
 	// Null move reduction
 	const BitboardBoard& board = engine->GetBitboardBoard();
@@ -465,6 +472,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	int moveCount = 0;
 
+	bool foundLegal = false;
 	// Loop through moves
 	for (const Move& move : moves)
 	{
