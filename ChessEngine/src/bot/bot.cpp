@@ -471,14 +471,26 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	int bestEval = -INF;
 
 	int moveCount = 0;
-
 	bool foundLegal = false;
+
+	// For lmp
+	int lmpLimit = (3 + depth * depth) / (improving ? 1 : 2);
+	bool skipQuiets = false;
+
 	// Loop through moves
 	for (const Move& move : moves)
 	{
 		bool captureMove = MoveIsCapture(move, engine->GetBitboardBoard());
 		bool isKillerMove = (move == killerMoves[ply][0] || move == killerMoves[ply][1]);
 		bool isHistoryBest = (ScoreMove(move, ply, false) >= killerBonus);
+		bool isQuiet = !captureMove && GetPromotion(move) == (int)Pieces::NONE;
+
+		// Late move pruning
+		if (!pvNode && isQuiet && bestEval > (MATE_VAL - MAX_PLY) && !engine->GivesCheck(move))
+		{
+			if (skipQuiets) continue;
+			if (depth <= 8 && moveCount >= lmpLimit) { skipQuiets = true; continue; }
+		}
 
 		engine->MakeMove(move);
 

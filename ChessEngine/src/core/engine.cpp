@@ -568,6 +568,56 @@ bool Engine::Is50Move() const
 	return (halfmoves >= 100);
 }
 
+bool Engine::GivesCheck(Move move) const
+{
+	const int from = GetStart(move);
+	const int to = GetEnd(move);
+	const Piece movingPiece = board[from].GetPiece();
+	const int us = IsWhite(movingPiece.GetColor()) ? 0 : 1;
+	const int kingSquare = us == 0 ? blackKingPos : whiteKingPos;
+
+	// What the piece is after the move (a promotion changes it)
+	const int promotion = GetPromotion(move);
+	const Pieces typeAfter = promotion != (int)Pieces::NONE ? (Pieces)promotion : movingPiece.GetType();
+
+	// Occupancy after the move
+	const Bitboard fromBit = 1ULL << from;
+	const Bitboard toBit = 1ULL << to;
+	Bitboard occupied = (bitboards.occupied & ~fromBit) | toBit;
+	if (IsEnPassant(move)) // The captured pawn is behind the target square
+		occupied &= ~(1ULL << (to + (us == 0 ? 8 : -8)));
+
+	// Our sliders after the move: the moving piece leaves `from` and (if it slides) arrives on `to`
+	auto own = [&](Pieces type) { return bitboards.pieceBitboards[us][(int)type - 1]; };
+	Bitboard diagonal = (own(Pieces::BISHOP) | own(Pieces::QUEEN)) & ~fromBit;
+	Bitboard straight = (own(Pieces::ROOK) | own(Pieces::QUEEN)) & ~fromBit;
+	if (typeAfter == Pieces::BISHOP || typeAfter == Pieces::QUEEN) diagonal |= toBit;
+	if (typeAfter == Pieces::ROOK || typeAfter == Pieces::QUEEN) straight |= toBit;
+
+	// Castling also moves the rook
+	if (IsCastle(move))
+	{
+		const bool kingside = ToCol(to) == 6;
+		const int row = ToRow(from);
+		const Bitboard rookFrom = 1ULL << ToIndex(row, kingside ? 7 : 0);
+		const Bitboard rookTo = 1ULL << ToIndex(row, kingside ? 5 : 3);
+		occupied = (occupied & ~rookFrom) | rookTo;
+		straight = (straight & ~rookFrom) | rookTo;
+	}
+
+	// Looking OUT from the enemy king along diagonals and lines finds both direct slider checks
+	// and discovered checks (a slider whose line was opened by the move) in one go.
+	// GetPseudoAttacks with only an occupancy returns the attack set including the first blocker.
+	if (Movegen::GetPseudoAttacks(Pieces::BISHOP, kingSquare, occupied, true) & diagonal) return true;
+	if (Movegen::GetPseudoAttacks(Pieces::ROOK, kingSquare, occupied, true) & straight) return true;
+
+	// Non-sliders can only give direct check
+	const Bitboard kingBit = 1ULL << kingSquare;
+	if (typeAfter == Pieces::KNIGHT) return (Movegen::GetKnightAttacks()[to] & kingBit) != 0;
+	if (typeAfter == Pieces::PAWN)   return (Movegen::GetPawnAttacks()[us][to] & kingBit) != 0;
+	return false;
+}
+
 bool Engine::ValidMove(const Piece piece, const Move move)
 {
 	// Check if the move is valid for the given piece type
