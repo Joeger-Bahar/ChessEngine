@@ -259,7 +259,7 @@ uint64_t Engine::ComputeFullHash() const
 	if (blackCastlingRights[0]) hash ^= zobrist.castling[3]; // BQ
 
 	// En passant (only the file)
-	if (enPassantTarget != -1)
+	if (EnPassantCapturable(currentPlayer))
 	{
 		//std::cout << "Adding en passant\n";
 		int file = ToCol(enPassantTarget);
@@ -405,7 +405,7 @@ void Engine::MakeMove(const Move move)
 	AppendUndoList(state, move);
 
 	// XOR OUT old state
-	if (enPassantTarget != -1)
+	if (EnPassantCapturable(currentPlayer))
 		zobristKey ^= zobrist.enPassantFile[ToCol(enPassantTarget)];
 
 	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
@@ -514,8 +514,8 @@ void Engine::MakeMove(const Move move)
 	if (blackCastlingRights[1]) zobristKey ^= zobrist.castling[2];
 	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
 
-	// XOR in new en-passant if present
-	if (enPassantTarget != -1)
+	// XOR in new en-passant if a capture is actually possible (players are not swapped yet)
+	if (EnPassantCapturable(Opponent(currentPlayer)))
 		zobristKey ^= zobrist.enPassantFile[ToCol(enPassantTarget)];
 
 	// --- Finally, flip side-to-move in engine state and in the hash consistently ---
@@ -561,6 +561,18 @@ bool Engine::IsRepetitionDraw(int ply) const
 		if (positionStack[last - back] == positionStack[last])
 			return true;
 	return false;
+}
+
+// The en passant square only counts as part of the position (for the hash, and so for repetition
+// and the opening book) if a pawn of `capturer` could actually take en passant. FIDE and CuteChess
+// treat two positions as the same otherwise, so hashing it after every double push made the engine
+// miss repetitions whose first occurrence came right after one.
+bool Engine::EnPassantCapturable(Color capturer) const
+{
+	if (enPassantTarget == -1) return false;
+	int c = IsWhite(capturer) ? 0 : 1;
+	// Capturer pawns that attack the ep square sit where the OTHER colour's pawn attacks from that square land
+	return (Movegen::GetPawnAttacks()[1 - c][enPassantTarget] & bitboards.pieceBitboards[c][(int)Pieces::PAWN - 1]) != 0;
 }
 
 bool Engine::Is50Move() const
@@ -931,7 +943,7 @@ void Engine::MakeNullMove()
 	AppendUndoList(state, Move());
 
 	// Clear en passant and castling
-	if (enPassantTarget != -1)
+	if (EnPassantCapturable(currentPlayer))
 		zobristKey ^= zobrist.enPassantFile[ToCol(enPassantTarget)];
 	if (whiteCastlingRights[1]) zobristKey ^= zobrist.castling[0];
 	if (whiteCastlingRights[0]) zobristKey ^= zobrist.castling[1];

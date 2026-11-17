@@ -50,6 +50,7 @@ public:
 	bool IsThreefold() const;
 	bool HasRepeated() const;
 	bool IsRepetitionDraw(int ply) const; // For the search: see engine.cpp
+	bool EnPassantCapturable(Color capturer) const; // See engine.cpp
 	bool Is50Move() const;
 	bool GivesCheck(Move move) const;
 	inline const bool IsOver() const { return GameState::checkmate || GameState::draw; }

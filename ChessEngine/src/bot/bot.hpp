@@ -46,7 +46,7 @@ private:
 	int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
 	Engine* engine;
 	Color botColor;
-	// 
+	
 	std::vector<Move> moveLists[MAX_PLY];
 	std::vector<Move> qMoveLists[MAX_PLY];
 	SearchStackEntry searchStack[MAX_PLY + 8];

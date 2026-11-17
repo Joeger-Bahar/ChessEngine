@@ -337,7 +337,16 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	int staticEval = inCheck ? NO_EVAL : Eval(movingColor, engine);
 	ss->staticEval = staticEval;
 	// If the eval has improved since our last term. Used for more aggressive pruning
-	bool improving = !inCheck && (ss - 2)->staticEval != NO_EVAL && staticEval > (ss - 2)->staticEval;
+	bool improving = false;
+	if (!inCheck)
+	{
+		if ((ss - 2)->staticEval != NO_EVAL)
+			improving = staticEval > (ss - 2)->staticEval;
+		else if ((ss - 4)->staticEval != NO_EVAL)
+			improving = staticEval > (ss - 4)->staticEval;
+		else
+			improving = true;
+	}
 
 	if (engine->IsDraw() || engine->IsRepetitionDraw(ply)) return 0;
 
@@ -482,11 +491,11 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	{
 		bool captureMove = MoveIsCapture(move, engine->GetBitboardBoard());
 		bool isKillerMove = (move == killerMoves[ply][0] || move == killerMoves[ply][1]);
-		bool isHistoryBest = (ScoreMove(move, ply, false) >= killerBonus);
+		bool isHistoryBest = (ScoreMove(move, ply, false) < killerBonus - 200);
 		bool isQuiet = !captureMove && GetPromotion(move) == (int)Pieces::NONE;
 
 		// Late move pruning
-		if (!pvNode && isQuiet && bestEval > (MATE_VAL - MAX_PLY) && !engine->GivesCheck(move))
+		if (!pvNode && !inCheck && isQuiet && bestEval > -(MATE_VAL - MAX_PLY) && !engine->GivesCheck(move))
 		{
 			if (skipQuiets) continue;
 			if (depth <= 8 && moveCount >= lmpLimit) { skipQuiets = true; continue; }
