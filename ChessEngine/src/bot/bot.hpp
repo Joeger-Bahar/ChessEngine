@@ -47,6 +47,8 @@ private:
 	Engine* engine;
 	Color botColor;
 	
+	// Continuation history
+	std::vector<int16_t> contHistory;
 	std::vector<Move> moveLists[MAX_PLY];
 	std::vector<Move> qMoveLists[MAX_PLY];
 	SearchStackEntry searchStack[MAX_PLY + 8];

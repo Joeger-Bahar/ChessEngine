@@ -33,6 +33,24 @@ static int ScoreFromTT(int score, int ply)
 	return score;
 }
 
+static inline int PieceIndex(Piece p)
+{
+	return (IsWhite(p.GetColor()) ? 0 : 6) + (int)p.GetType() - 1;
+}
+
+// History "gravity". Idk what this does
+static inline void UpdateHistory(int16_t& entry, int bonus)
+{
+	int v = entry;
+	v += bonus - v * std::abs(bonus) / 16384;
+	entry = v;
+}
+
+static inline void UpdateHistory(int& entry, int bonus)
+{
+	entry += bonus - entry * std::abs(bonus) / 16384;
+}
+
 static Tablebase tb("res/syzygy/");
 
 Bot::Bot(Engine* engine, Color color)
@@ -50,7 +68,9 @@ Bot::Bot(Engine* engine, Color color)
 	for (int d = 0; d < 64; ++d)
 		for (int m = 0; m < 64; ++m)
 			// Deeper move and deeper depth = bigger reduction
-			lmrTable[d][m] = (d == 0 || m == 0) ? 0 : int(0.75 + std::log(d) * std::log(m) / 2.25); // Standard, tuned magic numbers
+			lmrTable[d][m] = (d == 0 || m == 0) ? 0 : int(0.75 + std::log(d) * std::log(m) / 2.25); // Standard tuned magic numbers
+
+	contHistory.assign(768 * 768, 0);
 }
 
 int PieceValue(Piece piece)
@@ -101,16 +121,49 @@ int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 			return killerBonus - 200; // Slightly below killer moves
 	}
 
-	return historyHeuristic[(int)moved.GetColor()][(int)moved.GetType() - 1][GetStart(move)][GetEnd(move)];
+	int score = historyHeuristic[(int)moved.GetColor()][(int)moved.GetType() - 1][GetStart(move)][GetEnd(move)];
+
+	// Continuation history: how this move has done as a reply to 1 and 2 plies ago historically
+	SearchStackEntry* ss = &searchStack[ply + 4];
+	int current = PieceIndex(moved) * 64 + GetEnd(move);
+	for (int back = 1; back <= 2; ++back)
+	{
+		SearchStackEntry* prev = ss - back;
+		if (prev->pieceIndex >= 0)
+		{
+			score += contHistory[(prev->pieceIndex * 64 + GetEnd(prev->move)) * 768 + current];
+		}
+	}
+	return score;
 }
 
 // Orders moves in-place, best first
 void Bot::OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove)
 {
-	std::sort(moves.begin(), moves.end(),
-		[&](const Move& a, const Move& b) {
-			return ScoreMove(a, ply, onlyMVVLVA) > ScoreMove(b, ply, onlyMVVLVA);
-		});
+	// Score every move once and keep the scores in a parallel array. Calling ScoreMove inside
+	// the sort comparator re-scored both moves on every comparison (~2 * n * log2(n) calls).
+	const size_t n = moves.size();
+	thread_local std::vector<int> scores; // Reused between calls, so no allocation after warm-up
+	scores.resize(n);
+	for (size_t i = 0; i < n; ++i)
+		scores[i] = ScoreMove(moves[i], ply, onlyMVVLVA);
+
+	// Insertion sort, highest score first, moving each move together with its score.
+	// Move lists are short, where this is faster than std::sort. Equal scores keep their order.
+	for (size_t i = 1; i < n; ++i)
+	{
+		const int s = scores[i];
+		const Move m = moves[i];
+		size_t j = i;
+		while (j > 0 && scores[j - 1] < s)
+		{
+			scores[j] = scores[j - 1];
+			moves[j] = moves[j - 1];
+			--j;
+		}
+		scores[j] = s;
+		moves[j] = m;
+	}
 
 	if (!MoveIsNull(firstMove))
 	{
@@ -145,6 +198,8 @@ void Bot::Clear()
 	memset(counterMoves, 0, sizeof(counterMoves));
 
 	tt.Clear();
+
+	std::fill(contHistory.begin(), contHistory.end(), 0);
 }
 
 Move Bot::GetMoveUCI(int timeForMove)
@@ -219,6 +274,9 @@ Move Bot::GetMove()
 
 		for (const Move& move : moves)
 		{
+			searchStack[4].move = move;
+			searchStack[4].pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
+
 			engine->MakeMove(move);
 
 			if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
@@ -413,7 +471,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	}
 
 	// Multi-cut pruning
-	if (depth >= 5 && !inCheck && !followingNullMove && !GameState::endgame)
+	if (!pvNode && depth >= 5 && !inCheck && !followingNullMove && hasNonPawn) // GameState::endgame isn't updated in UCI mode
 	{
 		const int CUT_DEPTH = 2;     // Shallow depth for test searches
 		const int CUT_COUNT = 4;     // Number of moves to test
@@ -427,7 +485,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		int tested = 0;
 		for (const Move& move : testMoves)
 		{
-			if (tested++ >= CUT_COUNT) break;
+			if (tested >= CUT_COUNT) break;
+
+			ss->move = move;
+			ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
 
 			engine->MakeMove(move);
 			if (engine->InCheck(movingColor)) // Moving color is assigned before makeMove is called
@@ -435,6 +496,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 				engine->UndoMove();
 				continue;
 			}
+			++tested; // Only legal moves count toward CUT_COUNT
 
 			previousMoves[ply + 1] = move;
 			int score = -Search(depth - CUT_DEPTH - 1, ply + 1, -beta, -beta + 1);
@@ -482,6 +544,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	int moveCount = 0;
 	bool foundLegal = false;
 
+	// For continuation history, record quiet moves that didn't cause a cutoff
+	Move quietsTried[64];
+	int quietCount = 0;
+
 	// For lmp
 	int lmpLimit = (3 + depth * depth) / (improving ? 1 : 2);
 	bool skipQuiets = false;
@@ -491,7 +557,6 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	{
 		bool captureMove = MoveIsCapture(move, engine->GetBitboardBoard());
 		bool isKillerMove = (move == killerMoves[ply][0] || move == killerMoves[ply][1]);
-		bool isHistoryBest = (ScoreMove(move, ply, false) < killerBonus - 200);
 		bool isQuiet = !captureMove && GetPromotion(move) == (int)Pieces::NONE;
 
 		// Late move pruning
@@ -499,7 +564,18 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		{
 			if (skipQuiets) continue;
 			if (depth <= 8 && moveCount >= lmpLimit) { skipQuiets = true; continue; }
+
+			// Futility pruning: even a good quiet move can't lift the static eval up to alpha
+			int lmrDepth = std::max(0, depth - 1 - lmrTable[std::min(depth, 63)][std::min(moveCount + 1, 63)]);
+			if (lmrDepth <= 6 && staticEval + 100 + 110 * lmrDepth <= alpha)
+			{
+				skipQuiets = true;
+				continue;
+			}
 		}
+
+		ss->move = move;
+		ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
 
 		engine->MakeMove(move);
 
@@ -513,25 +589,23 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		previousMoves[ply + 1] = move;
 
-		// Reduce if move is 4+, depth is 3+, not in check, not opponent in check,
-		// not capture move, not killer move, not history best, and not promotion
-		// Further reduction is move is 8+ and depth is 6+
-			int reduction = 0;
-			if (moveCount > (pvNode ? 2 : 1) && depth >= 3 && !inCheck &&
-				!captureMove && GetPromotion(move) == (int)Pieces::NONE)
-			{
-				// Get fine tuned adjustment
-				reduction = lmrTable[std::min(depth, 63)][std::min(moveCount, 63)];
+		// Reduce later moves more because we assume they are worse from move ordering
+		int reduction = 0;
+		if (moveCount > (pvNode ? 2 : 1) && depth >= 3 && !inCheck &&
+			!captureMove && GetPromotion(move) == (int)Pieces::NONE)
+		{
+			// Get fine tuned adjustment
+			reduction = lmrTable[std::min(depth, 63)][std::min(moveCount, 63)];
 
-				// Tuned adjustments
-				if (!pvNode)         reduction++;
-				if (!improving)		 reduction++;
-				if (opponentInCheck) reduction--;
-				if (isKillerMove)    reduction--;
+			// Tuned adjustments
+			if (!pvNode)         reduction++;
+			if (!improving)		 reduction++;
+			if (opponentInCheck) reduction--;
+			if (isKillerMove)    reduction--;
 
-				// Stop from jumping into qsearch
-				reduction = std::clamp(reduction, 0, newDepth - 1);
-			}
+			// Stop from jumping into qsearch
+			reduction = std::clamp(reduction, 0, newDepth - 1);
+		}
 
 		// Principal variation search (see GetMove). In a non-PV node the window is already
 		// (alpha, alpha + 1), so the re-search condition can never be true there.
@@ -578,8 +652,18 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 				Piece movingPiece = engine->GetBoard()[from].GetPiece();
 				int pieceType = (int)movingPiece.GetType() - 1;
 
-				historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to] =
-					std::min(historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to] + depth * depth * 100, 32767);
+				int bonus = std::min(16 * depth * depth + 64 * depth - 64, 1500);
+
+				// Reward the move that caused the cutoff
+				UpdateHistory(historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to], bonus);
+
+				// Penalise the quiet moves searched before it that didn't cut off
+				for (int i = 0; i < quietCount; ++i)
+				{
+					Move q = quietsTried[i];
+					Piece p = engine->GetBoard()[GetStart(q)].GetPiece();
+					UpdateHistory(historyHeuristic[(int)p.GetColor()][(int)p.GetType() - 1][GetStart(q)][GetEnd(q)], -bonus);
+				}
 
 				// Countermove heuristic
 				Move prev = previousMoves[ply]; // The move that led to this node (moveLists[ply - 1][0] was just the parent's first move)
@@ -589,9 +673,27 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 					int prevTo = GetEnd(prev);
 					counterMoves[(int)movingPiece.GetColor()][prevFrom][prevTo] = move;
 				}
+
+				// Continuation history: reward the cutoff move, penalise the quiet moves tried before it
+				auto updateCont = [&](Move m, int b)
+				{
+					int current = PieceIndex(engine->GetBoard()[GetStart(m)].GetPiece()) * 64 + GetEnd(m);
+					for (int back = 1; back <= 2; ++back)
+					{
+						SearchStackEntry* prev = ss - back;
+						if (prev->pieceIndex >= 0)
+							UpdateHistory(contHistory[(prev->pieceIndex * 64 + GetEnd(prev->move)) * 768 + current], b);
+					}
+				};
+				updateCont(move, bonus);
+				for (int i = 0; i < quietCount; ++i)
+					updateCont(quietsTried[i], -bonus);
 			}
 			break;
 		}
+
+		if (isQuiet && quietCount < 64)
+			quietsTried[quietCount++] = move;
 	}
 
 	// Check checkmate/stalemate
