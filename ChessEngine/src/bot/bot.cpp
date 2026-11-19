@@ -277,7 +277,7 @@ void Bot::OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move fi
 int& Bot::CaptureHistoryEntry(Move move)
 {
 	Piece movingPiece = engine->GetBoard()[GetStart(move)].GetPiece();
-	int capturedPiece = IsEnPassant(move) ? (int)Pieces::PAWN : (int)engine->GetBoard()[GetStart(move)].GetPiece().GetType();
+	int capturedPiece = IsEnPassant(move) ? (int)Pieces::PAWN : (int)engine->GetBoard()[GetEnd(move)].GetPiece().GetType();
 	return captureHistory[PieceIndex(movingPiece)][GetEnd(move)][capturedPiece - 1];
 }
 
@@ -617,41 +617,51 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			return nullScore >= MATE_VAL - MAX_PLY ? beta : nullScore; // Fail-hard beta cutoff
 	}
 
-	// Multi-cut pruning
-	if (!pvNode && depth >= 5 && !inCheck && !followingNullMove && hasNonPawn) // GameState::endgame isn't updated in UCI mode
+	// ProbCut, if a capture beats beta by a big margin even in a shallow search,
+	// the full search would probably fail high too
+	const int probCutBeta = beta + 200;
+	if (!pvNode && !inCheck && depth >= 5 && std::abs(beta) < MATE_VAL - MAX_PLY)
 	{
-		const int CUT_DEPTH = 2;     // Shallow depth for test searches
-		const int CUT_COUNT = 4;     // Number of moves to test
-		const int CUT_THRESHOLD = 3; // Number of beta cutoffs needed
-		int cutoffs = 0;
+		TTEntry entry;
+		bool ttSaysNo = tt.ttLookup(key, entry) && entry.depth >= depth - 3
+			&& ScoreFromTT(entry.score, ply) < probCutBeta;
 
-		std::vector<Move> testMoves;
-		Movegen::GetAllMoves(testMoves, movingColor, engine->GetBitboardBoard(), engine, true);
-		OrderMoves(testMoves, ply, false);
-
-		int tested = 0;
-		for (const Move& move : testMoves)
+		if (!ttSaysNo)
 		{
-			if (tested >= CUT_COUNT) break;
+			std::vector<Move> captures;
+			Movegen::GetAllMoves(captures, movingColor, engine->GetBitboardBoard(), engine, true, true);
+			OrderMoves(captures, ply, true);
 
-			ss->move = move;
-			ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
-
-			engine->MakeMove(move);
-			if (engine->InCheck(movingColor)) // Moving color is assigned before makeMove is called
+			for (const Move& move : captures)
 			{
+				// Only captures that win enough material to probably get there
+				if (!SEE(move, probCutBeta - staticEval))
+					continue;
+
+				ss->move = move;
+				ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
+
+				engine->MakeMove(move);
+				if (engine->InCheck(movingColor))
+				{
+					engine->UndoMove();
+					continue;
+				}
+				previousMoves[ply + 1] = move;
+
+				// Cheap qsearch, and confirm with shallow search if it passes
+				int score = -Qsearch(-probCutBeta, -probCutBeta + 1, ply + 1);
+				if (!quitEarly && score >= probCutBeta)
+					score = -Search(depth - 4, ply + 1, -probCutBeta, -probCutBeta + 1);
 				engine->UndoMove();
-				continue;
+
+				if (quitEarly) return alpha;
+				if (score >= probCutBeta)
+				{
+					tt.ttStore(key, depth - 3, ScoreToTT(score, ply), move, TT_BETA);
+					return score;
+				}
 			}
-			++tested; // Only legal moves count toward CUT_COUNT
-
-			previousMoves[ply + 1] = move;
-			int score = -Search(depth - CUT_DEPTH - 1, ply + 1, -beta, -beta + 1);
-			engine->UndoMove();
-
-			if (quitEarly) return alpha;
-			if (score >= beta && ++cutoffs >= CUT_THRESHOLD)
-				return beta; // Prune entire node
 		}
 	}
 

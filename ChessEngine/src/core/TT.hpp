@@ -28,6 +28,9 @@ struct TranspositionTable
     bool ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove);
     void ttStore(uint64_t key, int depth, int score, uint32_t move32, uint8_t flag);
 
+    // Copies out the entry for key, false is there isn't one
+    bool ttLookup(uint64_t key, TTEntry& out) const;
+
     inline size_t IndexFor(uint64_t key) const;
 
     void Clear();

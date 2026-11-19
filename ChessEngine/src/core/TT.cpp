@@ -94,6 +94,14 @@ void TranspositionTable::ttStore(uint64_t key, int depth, int score, uint32_t mo
     }
 }
 
+bool TranspositionTable::ttLookup(uint64_t key, TTEntry& out) const
+{
+    const TTEntry& e = table[IndexFor(key)];
+    if (e.key != key) return false;
+    out = e;
+    return true;
+}
+
 inline size_t TranspositionTable::IndexFor(uint64_t key) const
 {
     return (size_t)(key & (entries - 1));
