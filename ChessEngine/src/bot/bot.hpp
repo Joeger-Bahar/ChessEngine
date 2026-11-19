@@ -36,6 +36,8 @@ public:
 	void Clear();
 
 private:
+	bool SEE(Move move, int threshold);
+
 	int Search(int depth, int ply, int alpha, int beta);
 	int Qsearch(int alpha, int beta, int ply, int qply = 0);
 	int ScoreMove(const Move move, int ply, bool onlyMVVLVA);

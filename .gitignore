@@ -367,3 +367,5 @@ FodyWeavers.xsd
 /ChessEngine/res/komodo.bin
 /ChessEngine/src/stockfish
 /ChessEngine/src/BOT_SEARCH_CHANGES.md
+/ChessEngine/src/Claude outputs
+/ChessEngine/src/bot/bot-1.cpp

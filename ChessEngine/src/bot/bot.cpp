@@ -51,6 +51,94 @@ static inline void UpdateHistory(int& entry, int bonus)
 	entry += bonus - entry * std::abs(bonus) / 16384;
 }
 
+bool Bot::SEE(Move move, int threshold)
+{
+	const int pieceValues[] = { 0, 100, 320, 330, 500, 900, 0 };
+
+	if (IsEnPassant(move) || IsCastle(move) || GetPromotion(move) != (int)Pieces::NONE)
+		return 0 >= threshold;
+
+	int from = GetStart(move);
+	int to = GetEnd(move);
+	const BitboardBoard& b = engine->GetBitboardBoard();
+	Piece movingPiece = engine->GetBoard()[from].GetPiece();
+
+	// We capture and they don't recapture
+	int swap = pieceValues[(int)engine->GetBoard()[to].GetPiece().GetType()] - threshold;
+	if (swap < 0) return false;
+
+	// They capture and we can't
+	swap = pieceValues[(int)movingPiece.GetType()] - swap;
+	if (swap <= 0) return true;
+
+	// Get bitboard occ for pieces of a certain type
+	auto getPieceOccOfType = [&](Pieces piece) { return b.pieceBitboards[0][(int)piece - 1] | b.pieceBitboards[1][(int)piece - 1]; };
+	Bitboard straight = getPieceOccOfType(Pieces::ROOK) | getPieceOccOfType(Pieces::QUEEN);
+	Bitboard diagonal = getPieceOccOfType(Pieces::BISHOP) | getPieceOccOfType(Pieces::QUEEN);
+	// Get diagonal attackers
+	auto diagonalFrom = [&](Bitboard occ) {return Movegen::GetPseudoAttacks(Pieces::BISHOP, to, occ, true); };
+	// Get straight attackers
+	auto straightFrom = [&](Bitboard occ) {return Movegen::GetPseudoAttacks(Pieces::ROOK, to, occ, true); };
+
+	// Remove captured and capturing piece
+	Bitboard occupied = b.occupied ^ (1ULL << from) ^ (1ULL << to);
+
+	Bitboard attackers =
+		(Movegen::GetPawnAttacks()[1][to] & b.pieceBitboards[0][(int)Pieces::PAWN - 1]) | // White pawns
+		(Movegen::GetPawnAttacks()[0][to] & b.pieceBitboards[1][(int)Pieces::PAWN - 1]) | // Black pawns
+		(Movegen::GetKnightAttacks()[to] & getPieceOccOfType(Pieces::KNIGHT)) |
+		(Movegen::GetKingAttacks()[to] & getPieceOccOfType(Pieces::KING)) |
+		(diagonalFrom(occupied) & diagonal) |
+		(straightFrom(occupied) & straight);
+
+	int side = IsWhite(movingPiece.GetColor()) ? 0 : 1;
+	int result = 1; // If the side that played the move is happy with the result, swaps every time
+
+	while (true)
+	{
+		side ^= 1;
+		attackers &= occupied; // Drop captured pieces
+		Bitboard ours = b.allPieces[side] & attackers;
+		if (!ours) break; // Can't recapture so exchange is over
+		result ^= 1;
+
+		Bitboard bb;
+		if ((bb = ours & b.pieceBitboards[side][(int)Pieces::PAWN - 1]))
+		{
+			if ((swap = pieceValues[(int)Pieces::PAWN] - swap) < result) break;
+			occupied ^= bb & (~bb + 1);                   // Remove the capturing piece (lowest bit)
+			attackers |= diagonalFrom(occupied) & diagonal; // A bishop/queen behind it can now join in
+		}
+		else if ((bb = ours & b.pieceBitboards[side][(int)Pieces::KNIGHT - 1]))
+		{
+			if ((swap = pieceValues[(int)Pieces::KNIGHT] - swap) < result) break;
+			occupied ^= bb & (~bb + 1);
+		}
+		else if ((bb = ours & b.pieceBitboards[side][(int)Pieces::BISHOP - 1]))
+		{
+			if ((swap = pieceValues[(int)Pieces::BISHOP] - swap) < result) break;
+			occupied ^= bb & (~bb + 1);
+			attackers |= diagonalFrom(occupied) & diagonal;
+		}
+		else if ((bb = ours & b.pieceBitboards[side][(int)Pieces::ROOK - 1]))
+		{
+			if ((swap = pieceValues[(int)Pieces::ROOK] - swap) < result) break;
+			occupied ^= bb & (~bb + 1);
+			attackers |= straightFrom(occupied) & straight;
+		}
+		else if ((bb = ours & b.pieceBitboards[side][(int)Pieces::QUEEN - 1]))
+		{
+			if ((swap = pieceValues[(int)Pieces::QUEEN] - swap) < result) break;
+			occupied ^= bb & (~bb + 1);
+			attackers |= (diagonalFrom(occupied) & diagonal) | (straightFrom(occupied) & straight);
+		}
+		else // Only the king is left: it can recapture only if the other side has nothing left
+			return (attackers & ~b.allPieces[side]) ? (result ^ 1) : result;
+	}
+	
+	return result;
+}
+
 static Tablebase tb("res/syzygy/");
 
 Bot::Bot(Engine* engine, Color color)
@@ -101,7 +189,14 @@ int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 
 	// MVV-LVA: Most Valuable Victim - Least Valuable Attacker
 	if (captured.GetType() != Pieces::NONE)
-		return captureBonus + PieceValue(captured) * 16 - PieceValue(moved) + promotionBonus;
+	{
+		int capScore = PieceValue(captured) * 16 - PieceValue(moved) + promotionBonus;
+
+		if (onlyMVVLVA || SEE(move, 0)) return captureBonus + capScore;
+		return -captureBonus + capScore;
+	}
+
+
 	if (promotionBonus > 0)
 		return captureBonus - 1 + promotionBonus;
 
@@ -410,6 +505,15 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	if (depth <= 0 || engine->IsOver()) return Qsearch(alpha, beta, ply);
 
+	uint64_t key = engine->GetZobristKey();
+	int ttScore = 0;
+	uint32_t ttMove = 0; // ttProbe only writes these on a key match
+	// No TT cutoffs in PV nodes: they would cut the principal variation short. The probe still
+	// runs so the stored move can be searched first.
+	// TODO: Use this score instead of staticEval
+	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode)
+		return ScoreFromTT(ttScore, ply);
+
 	if (!pvNode && !inCheck)
 	{
 		// Razoring
@@ -420,17 +524,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			int qEval = Qsearch(alpha - 1, alpha, ply); // Same position, so same ply
 			if (qEval < alpha) return qEval;
 		}
-
 	}
-
-	uint64_t key = engine->GetZobristKey();
-	int ttScore = 0;
-	uint32_t ttMove = 0; // ttProbe only writes these on a key match
-	// No TT cutoffs in PV nodes: they would cut the principal variation short. The probe still
-	// runs so the stored move can be searched first.
-	// TODO: Use this score instead of staticEval
-	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode)
-		return ScoreFromTT(ttScore, ply);
 
 	// Reverse futility pruning
 	int RFP_MARGIN = 80; // 80 centipawns to assume to opponent can't recover
@@ -438,7 +532,6 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		&& staticEval - RFP_MARGIN * std::max(0, depth - improving) >= beta
 		&& staticEval < MATE_VAL - MAX_PLY)
 		return (staticEval + beta) / 2; // Blend to be a bit safer
-
 
 	// Null move reduction
 	const BitboardBoard& board = engine->GetBitboardBoard();
@@ -572,7 +665,16 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 				skipQuiets = true;
 				continue;
 			}
+
+			// SEE pruning quiet moves. Skip quiet moves that hang material
+			if (lmrDepth <= 6 && !SEE(move, -30 * lmrDepth * lmrDepth))
+				continue;
 		}
+
+		// SEE pruning captures. Skip captures that lose a lot of material
+		if (!pvNode && !inCheck && !isQuiet && depth <= 6 && bestEval > -(MATE_VAL - MAX_PLY)
+			&& !SEE(move, -100 * depth))
+			continue;
 
 		ss->move = move;
 		ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
@@ -759,6 +861,10 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 
 	for (const Move& move : moves)
 	{
+		// Losing exchange
+		if (!inCheck && !SEE(move, 0))
+			continue;
+
 		engine->MakeMove(move);
 		if (engine->InCheck(movingColor))
 		{
