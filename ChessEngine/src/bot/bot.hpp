@@ -58,6 +58,11 @@ private:
 	Move killerMoves[MAX_PLY][2];
 	Move counterMoves[2][64][64];
 	int lmrTable[64][64];
+
+	// Capture history [moving piece][to square][captured piece type]
+	int captureHistory[12][64][6] = {};
+	int& CaptureHistoryEntry(Move move);
+
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;

@@ -190,7 +190,8 @@ int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
 	// MVV-LVA: Most Valuable Victim - Least Valuable Attacker
 	if (captured.GetType() != Pieces::NONE)
 	{
-		int capScore = PieceValue(captured) * 16 - PieceValue(moved) + promotionBonus;
+		int capScore = PieceValue(captured) * 16 - PieceValue(moved) + promotionBonus
+			+ captureHistory[PieceIndex(moved)][GetEnd(move)][(int)captured.GetType() - 1] / 8;
 
 		if (onlyMVVLVA || SEE(move, 0)) return captureBonus + capScore;
 		return -captureBonus + capScore;
@@ -273,6 +274,13 @@ void Bot::OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move fi
 	}
 }
 
+int& Bot::CaptureHistoryEntry(Move move)
+{
+	Piece movingPiece = engine->GetBoard()[GetStart(move)].GetPiece();
+	int capturedPiece = IsEnPassant(move) ? (int)Pieces::PAWN : (int)engine->GetBoard()[GetStart(move)].GetPiece().GetType();
+	return captureHistory[PieceIndex(movingPiece)][GetEnd(move)][capturedPiece - 1];
+}
+
 void Bot::SetColor(Color color)
 {
 	this->botColor = color;
@@ -295,6 +303,8 @@ void Bot::Clear()
 	tt.Clear();
 
 	std::fill(contHistory.begin(), contHistory.end(), 0);
+
+	memset(captureHistory, 0, sizeof(captureHistory));
 }
 
 Move Bot::GetMoveUCI(int timeForMove)
@@ -685,6 +695,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	Move quietsTried[64];
 	int quietCount = 0;
 
+	// For capture history, record captures that didn't cause a cutoff
+	Move capturesTried[32];
+	int captureCount = 0;
+
 	// For lmp
 	int lmpLimit = (3 + depth * depth) / (improving ? 1 : 2);
 	bool skipQuiets = false;
@@ -785,6 +799,14 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		alpha = std::max(alpha, eval);
 		if (alpha >= beta)
 		{
+			int bonus = std::min(16 * depth * depth + 64 * depth - 64, 1500);
+
+			// Capture history, reward a capture that cut off, and penalize the cutoff move
+			if (captureMove)
+				UpdateHistory(CaptureHistoryEntry(move), bonus);
+			for (int i = 0; i < captureCount; ++i)
+				UpdateHistory(CaptureHistoryEntry(capturesTried[i]), -bonus);
+
 			if (!captureMove && (Pieces)GetPromotion(move) == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
 			{
 				if (killerMoves[ply][0] != move)
@@ -797,8 +819,6 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 				int to = GetEnd(move);
 				Piece movingPiece = engine->GetBoard()[from].GetPiece();
 				int pieceType = (int)movingPiece.GetType() - 1;
-
-				int bonus = std::min(16 * depth * depth + 64 * depth - 64, 1500);
 
 				// Reward the move that caused the cutoff
 				UpdateHistory(historyHeuristic[(int)movingPiece.GetColor()][pieceType][from][to], bonus);
@@ -840,6 +860,8 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		if (isQuiet && quietCount < 64)
 			quietsTried[quietCount++] = move;
+		else if (captureMove && captureCount < 32)
+			capturesTried[captureCount++] = move;
 	}
 
 	// Check checkmate/stalemate
