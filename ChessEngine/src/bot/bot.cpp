@@ -135,7 +135,7 @@ bool Bot::SEE(Move move, int threshold)
 		else // Only the king is left: it can recapture only if the other side has nothing left
 			return (attackers & ~b.allPieces[side]) ? (result ^ 1) : result;
 	}
-	
+
 	return result;
 }
 
@@ -349,13 +349,11 @@ Move Bot::GetMove()
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
 		std::cout << "Depth: " << depth << '\n';
-		int alpha = -INF;
-		int beta = INF;
+		rootDepth = depth;
 		bool foundLegal = false;
 
 		Move currentBestMove = Move();
 		int currentBestScore = -INF;
-		int moveCount = 0;
 
 		std::vector<Move> moves = moveLists[0];
 		Movegen::GetAllMoves(moves, botColor, engine->GetBitboardBoard(), engine);
@@ -367,53 +365,99 @@ Move Bot::GetMove()
 			if (!moves.empty()) bestMove = moves[0]; // If not enough time to find move, set default after sorting
 		}
 
-		for (const Move& move : moves)
+		// Aspiration window
+		// From depth 5, search a narrow window around last iteration score
+		// Mostly lands inside so more pruning
+		int delta = 25;
+		int windowAlpha = -INF;
+		int windowBeta = INF;
+
+		if (depth >= 5 && std::abs(bestScore) < MATE_VAL - MAX_PLY)
 		{
-			searchStack[4].move = move;
-			searchStack[4].pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
+			windowAlpha = bestScore - delta;
+			windowBeta = bestScore + delta;
+		}
 
-			engine->MakeMove(move);
+		while (true)
+		{
+			int alpha = windowAlpha;
+			int beta = windowBeta;
+			int moveCount = 0;
+			foundLegal = false;
+			currentBestMove = Move();
+			currentBestScore = -INF;
 
-			if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
-
-			foundLegal = true;
-			++moveCount;
-			previousMoves[1] = move;
-
-			// PVS, assuming good move ordering
-			int score;
-			if (moveCount == 1)
+			for (const Move& move : moves)
 			{
-				score = -Search(depth - 1, 1, -beta, -alpha);
+				searchStack[4].move = move;
+				searchStack[4].pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
+
+				engine->MakeMove(move);
+
+				if (engine->InCheck(botColor)) { engine->UndoMove(); continue; }
+
+				foundLegal = true;
+				++moveCount;
+				previousMoves[1] = move;
+
+				// PVS, assuming good move ordering
+				int score;
+				if (moveCount == 1)
+				{
+					score = -Search(depth - 1, 1, -beta, -alpha);
+				}
+				else
+				{
+					score = -Search(depth - 1, 1, -alpha - 1, -alpha);
+					if (!quitEarly && score > alpha && score < beta) // Move was good, full research
+						score = -Search(depth - 1, 1, -beta, -alpha);
+				}
+
+				engine->UndoMove();
+
+				if (quitEarly)
+					break;
+
+				auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
+				if (timePerTurn >= 0 && elapsed >= timePerTurn)
+				{
+					quitEarly = true;
+					break;
+				}
+
+				if (score > currentBestScore)
+				{
+					currentBestScore = score;
+					currentBestMove = move;
+				}
+
+				alpha = std::max(alpha, currentBestScore);
+				if (alpha >= beta)
+					break;
+			}
+
+			if (quitEarly || !foundLegal)
+				break;
+
+			if (currentBestScore <= windowAlpha)
+			{
+				// Fail low. Scored below window, so lower bottom
+				windowBeta = (windowAlpha + windowBeta) / 2;
+				windowAlpha = std::max(currentBestScore - delta, -INF);
+			}
+			else if (currentBestScore >= windowBeta)
+			{
+				// Fail high. Score above window, so raise top and search that first
+				windowBeta = std::min(currentBestScore + delta, INF);
+				std::vector<Move>::iterator it = std::find(moves.begin(), moves.end(), currentBestMove);
+				if (it != moves.end())
+					std::rotate(moves.begin(), it, it + 1);
 			}
 			else
-			{
-				score = -Search(depth - 1, 1, -alpha - 1, -alpha);
-				if (!quitEarly && score > alpha && score < beta) // Move was good, full research
-					score = -Search(depth - 1, 1, -beta, -alpha);
-			}
+				break; // Score inside window
 
-			engine->UndoMove();
-
-			if (quitEarly)
-				break;
-
-			auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
-			if (timePerTurn >= 0 && elapsed >= timePerTurn)
-			{
-				quitEarly = true;
-				break;
-			}
-
-			if (score > currentBestScore)
-			{
-				currentBestScore = score;
-				currentBestMove = move;
-			}
-
-			alpha = std::max(alpha, currentBestScore);
-			if (alpha >= beta)
-				break;
+			delta += delta / 2; // Widen window faster every time
+			if (delta > 500) { windowAlpha = -INF; windowBeta = INF; }
 		}
 
 		if (foundLegal)
@@ -484,7 +528,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// +4 for buffer so we never need to worry about indexing
 	SearchStackEntry* ss = &searchStack[ply + 4];
 
-	bool followingNullMove = (ss-1)->nullMove; // Used for this search only
+	bool followingNullMove = (ss - 1)->nullMove; // Used for this search only
 	bool pvNode = (beta - alpha) > 1;
 	bool inCheck = engine->InCheck(movingColor);
 	int staticEval = inCheck ? NO_EVAL : Eval(movingColor, engine);
@@ -538,11 +582,11 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// Most zugzwang happens in pawn-king endgames, so avoid that
 	int c = IsWhite(movingColor) ? 0 : 1;
 	bool hasNonPawn = (board.pieceBitboards[c][(int)Pieces::KNIGHT - 1] |
-					  board.pieceBitboards[c][(int)Pieces::BISHOP - 1] |
-					  board.pieceBitboards[c][(int)Pieces::ROOK - 1] |
-					  board.pieceBitboards[c][(int)Pieces::QUEEN - 1]) != 0;
+		board.pieceBitboards[c][(int)Pieces::BISHOP - 1] |
+		board.pieceBitboards[c][(int)Pieces::ROOK - 1] |
+		board.pieceBitboards[c][(int)Pieces::QUEEN - 1]) != 0;
 
-	if (depth >= 3 && !pvNode && !inCheck && hasNonPawn && staticEval >= beta && !(ss-1)->nullMove)
+	if (depth >= 3 && !pvNode && !inCheck && hasNonPawn && staticEval >= beta && !(ss - 1)->nullMove)
 	{
 		// Adaptive reduction
 		int reduction = 2 + depth / 4 + std::min((staticEval - beta) / 200, 2);
@@ -778,15 +822,15 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 				// Continuation history: reward the cutoff move, penalise the quiet moves tried before it
 				auto updateCont = [&](Move m, int b)
-				{
-					int current = PieceIndex(engine->GetBoard()[GetStart(m)].GetPiece()) * 64 + GetEnd(m);
-					for (int back = 1; back <= 2; ++back)
 					{
-						SearchStackEntry* prev = ss - back;
-						if (prev->pieceIndex >= 0)
-							UpdateHistory(contHistory[(prev->pieceIndex * 64 + GetEnd(prev->move)) * 768 + current], b);
-					}
-				};
+						int current = PieceIndex(engine->GetBoard()[GetStart(m)].GetPiece()) * 64 + GetEnd(m);
+						for (int back = 1; back <= 2; ++back)
+						{
+							SearchStackEntry* prev = ss - back;
+							if (prev->pieceIndex >= 0)
+								UpdateHistory(contHistory[(prev->pieceIndex * 64 + GetEnd(prev->move)) * 768 + current], b);
+						}
+					};
 				updateCont(move, bonus);
 				for (int i = 0; i < quietCount; ++i)
 					updateCont(quietsTried[i], -bonus);

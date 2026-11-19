@@ -61,7 +61,7 @@ private:
 	// Start time of the search, used for time control
 	std::chrono::time_point<std::chrono::steady_clock> startTime;
 	int nodesSearched;
-	int extensionsThisSearch = 0;
+	int rootDepth = 0;
 	int timePerTurn = 12000; // In milliseconds
 	bool quitEarly = false;
 };
