@@ -20,6 +20,10 @@ public:
 	static std::vector<Move> GetAllMoves(Color color, const BitboardBoard& board, Engine* engine, bool onlyCaptures = false);
 	static Bitboard GetPseudoAttacks(Pieces piece, int sq, const Bitboard& allOcc, bool isWhite);
 
+	// Slider attacks from sq for this occ. Gets directly from magic tables
+	static Bitboard RookAttacks(int sq, Bitboard occ);
+	static Bitboard BishopAttacks(int sq, Bitboard occ);
+
 	static void InitPrecomputedAttacks();
 	static void BuildMagicAttackTables();
 	//static void GenerateAndInitMagics(bool dumpToHeader, const std::string& outPath);

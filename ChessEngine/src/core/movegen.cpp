@@ -93,13 +93,13 @@ bool Movegen::IsSquareAttacked(int sq, Color byColor, const BitboardBoard& board
 		return true;
 
 	// Bishops / Queens (diagonals)
-	Bitboard bishopMoves = SlidingMoves(sq, byColor, Pieces::BISHOP, board, true);
+	Bitboard bishopMoves = BishopAttacks(sq, board.occupied);
 	if (bishopMoves & (board.pieceBitboards[c][static_cast<int>(Pieces::BISHOP) - 1] |
 		board.pieceBitboards[c][static_cast<int>(Pieces::QUEEN) - 1]))
 		return true;
 
 	// Rooks / Queens (orthogonal)
-	Bitboard rookMoves = SlidingMoves(sq, byColor, Pieces::ROOK, board, true);
+	Bitboard rookMoves = RookAttacks(sq, board.occupied);
 	if (rookMoves & (board.pieceBitboards[c][static_cast<int>(Pieces::ROOK) - 1] |
 		board.pieceBitboards[c][static_cast<int>(Pieces::QUEEN) - 1]))
 		return true;
@@ -285,6 +285,16 @@ Bitboard Movegen::GetPseudoAttacks(Pieces piece, int sq, const Bitboard& allOcc,
 	return moves;
 }
 
+Bitboard Movegen::RookAttacks(int sq, Bitboard occ)
+{
+	return rookAttacks[sq][((occ & rookMasks[sq]) * rookMagics[sq]) >> rookShifts[sq]];
+}
+
+Bitboard Movegen::BishopAttacks(int sq, Bitboard occ)
+{
+	return bishopAttacks[sq][((occ & bishopMasks[sq]) * bishopMagics[sq]) >> bishopShifts[sq]];
+}
+
 const Bitboard(&Movegen::GetPawnAttacks())[2][64]
 {
 	return pawnAttacks;
@@ -370,15 +380,11 @@ Bitboard Movegen::SlidingMoves(int sq, Color color, const Pieces piece,
 
 	if (rookMoves)
 	{
-		Bitboard occR = occ & rookMasks[sq];
-		uint64_t idxR = (occR * rookMagics[sq]) >> rookShifts[sq];
-		moves |= rookAttacks[sq][idxR];
+		moves |= RookAttacks(sq, occ);
 	}
 	if (bishopMoves)
 	{
-		Bitboard occB = occ & bishopMasks[sq];
-		uint64_t idxB = (occB * bishopMagics[sq]) >> bishopShifts[sq];
-		moves |= bishopAttacks[sq][idxB];
+		moves |= BishopAttacks(sq, occ);
 	}
 
 	if (!includeBlockers)

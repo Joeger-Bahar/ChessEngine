@@ -624,8 +624,8 @@ bool Engine::GivesCheck(Move move) const
 	// Looking OUT from the enemy king along diagonals and lines finds both direct slider checks
 	// and discovered checks (a slider whose line was opened by the move) in one go.
 	// GetPseudoAttacks with only an occupancy returns the attack set including the first blocker.
-	if (Movegen::GetPseudoAttacks(Pieces::BISHOP, kingSquare, occupied, true) & diagonal) return true;
-	if (Movegen::GetPseudoAttacks(Pieces::ROOK, kingSquare, occupied, true) & straight) return true;
+	if (Movegen::BishopAttacks(kingSquare, occupied) & diagonal) return true;
+	if (Movegen::RookAttacks(kingSquare, occupied) & straight) return true;
 
 	// Non-sliders can only give direct check
 	const Bitboard kingBit = 1ULL << kingSquare;

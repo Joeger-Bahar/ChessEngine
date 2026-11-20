@@ -76,9 +76,9 @@ bool Bot::SEE(Move move, int threshold)
 	Bitboard straight = getPieceOccOfType(Pieces::ROOK) | getPieceOccOfType(Pieces::QUEEN);
 	Bitboard diagonal = getPieceOccOfType(Pieces::BISHOP) | getPieceOccOfType(Pieces::QUEEN);
 	// Get diagonal attackers
-	auto diagonalFrom = [&](Bitboard occ) {return Movegen::GetPseudoAttacks(Pieces::BISHOP, to, occ, true); };
+	auto diagonalFrom = [&](Bitboard occ) {return Movegen::BishopAttacks(to, occ); };
 	// Get straight attackers
-	auto straightFrom = [&](Bitboard occ) {return Movegen::GetPseudoAttacks(Pieces::ROOK, to, occ, true); };
+	auto straightFrom = [&](Bitboard occ) {return Movegen::RookAttacks(to, occ); };
 
 	// Remove captured and capturing piece
 	Bitboard occupied = b.occupied ^ (1ULL << from) ^ (1ULL << to);
