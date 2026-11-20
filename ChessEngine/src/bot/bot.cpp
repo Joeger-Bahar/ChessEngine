@@ -690,20 +690,21 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			return singularBeta; // Multicut. Without TT move, anothre move beats beta
 	}
 
-	std::vector<Move> pseudoMoves;
-	pseudoMoves.reserve(256);
-	Movegen::GetAllMoves(pseudoMoves, movingColor, engine->GetBitboardBoard(), engine);
-
+	// Pseudo legal
 	std::vector<Move>& moves = moveLists[ply];
-	moves.clear();
+	//std::vector<Move> pseudoMoves;
+	//pseudoMoves.reserve(256);
+	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
 
-	for (const Move& move : pseudoMoves)
-	{
-		engine->MakeMove(move);
-		if (!engine->InCheck(movingColor))
-			moves.push_back(move);
-		engine->UndoMove();
-	}
+	//moves.clear();
+
+	//for (const Move& move : pseudoMoves)
+	//{
+	//	engine->MakeMove(move);
+	//	if (!engine->InCheck(movingColor))
+	//		moves.push_back(move);
+	//	engine->UndoMove();
+	//}
 
 	OrderMoves(moves, ply, false);
 
@@ -775,6 +776,12 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
 
 		engine->MakeMove(move);
+		// Check for illegal moves
+		if (engine->InCheck(movingColor))
+		{
+			engine->UndoMove();
+			continue;
+		}
 
 		++moveCount;
 		bool opponentInCheck = engine->InCheck(Opponent(movingColor));
