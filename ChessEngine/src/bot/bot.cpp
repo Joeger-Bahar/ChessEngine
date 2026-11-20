@@ -541,19 +541,6 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	bool followingNullMove = (ss - 1)->nullMove; // Used for this search only
 	bool pvNode = (beta - alpha) > 1;
 	bool inCheck = engine->InCheck(movingColor);
-	int staticEval = inCheck ? NO_EVAL : Eval(movingColor, engine);
-	ss->staticEval = staticEval;
-	// If the eval has improved since our last term. Used for more aggressive pruning
-	bool improving = false;
-	if (!inCheck)
-	{
-		if ((ss - 2)->staticEval != NO_EVAL)
-			improving = staticEval > (ss - 2)->staticEval;
-		else if ((ss - 4)->staticEval != NO_EVAL)
-			improving = staticEval > (ss - 4)->staticEval;
-		else
-			improving = true;
-	}
 
 	if (engine->IsDraw() || engine->IsRepetitionDraw(ply)) return 0;
 
@@ -568,6 +555,20 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	bool excluded = ss->excludedMove != 0;
 	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode && !excluded)
 		return ScoreFromTT(ttScore, ply);
+
+	int staticEval = inCheck ? NO_EVAL : Eval(movingColor, engine);
+	ss->staticEval = staticEval;
+	// If the eval has improved since our last term. Used for more aggressive pruning
+	bool improving = false;
+	if (!inCheck)
+	{
+		if ((ss - 2)->staticEval != NO_EVAL)
+			improving = staticEval > (ss - 2)->staticEval;
+		else if ((ss - 4)->staticEval != NO_EVAL)
+			improving = staticEval > (ss - 4)->staticEval;
+		else
+			improving = true;
+	}
 
 	if (!pvNode && !inCheck && !excluded)
 	{
