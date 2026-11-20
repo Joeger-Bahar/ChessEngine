@@ -84,8 +84,6 @@ private:
 	Zobrist zobrist;
 	uint64_t zobristKey = 0;
 
-	// For 3 move rep
-	std::unordered_map<uint64_t, int> positionCounts;
 	std::vector<uint64_t> positionStack; // To know what to decrement on undo
 
 	std::vector<Move> moveHistory;

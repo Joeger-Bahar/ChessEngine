@@ -11,6 +11,17 @@
 #include "bot/bot.hpp"
 #include "movegen.hpp"
 
+// Count earlier occurences of the current move, 2 plies back at a time
+static int Occurrences(const std::vector<uint64_t>& stack, int halfmoves)
+{
+	int last = (int)stack.size() - 1;
+	int count = 1;
+	for (int back = 2; back <= halfmoves && back <= last; back += 2)
+		if (stack[last - back] == stack[last])
+			++count;
+	return count;
+}
+
 // Make GameState variables not need prefix
 using namespace GameState;
 
@@ -42,8 +53,6 @@ void Engine::Reset()
 	// Reset zobrist key
 	zobristKey = ComputeFullHash();
 
-	// Clear repetition tracking
-	positionCounts.clear();
 	positionStack.clear();
 
 	// Clear move/undo history
@@ -526,7 +535,6 @@ void Engine::MakeMove(const Move move)
 	CheckKingInCheck();
 
 	positionStack.push_back(zobristKey);
-	positionCounts[zobristKey] += 1;
 }
 
 bool Engine::IsDraw() const
@@ -537,16 +545,12 @@ bool Engine::IsDraw() const
 
 bool Engine::IsThreefold() const
 {
-	if (positionStack.empty()) return false;
-	auto it = positionCounts.find(positionStack.back());
-	return (it != positionCounts.end() && it->second >= 3);
+	return Occurrences(positionStack, halfmoves) >= 3;
 }
 
 bool Engine::HasRepeated() const
 {
-	if (positionStack.empty()) return false;
-	auto it = positionCounts.find(positionStack.back());
-	return (it != positionCounts.end() && it->second >= 2);
+	return Occurrences(positionStack, halfmoves) >= 2;
 }
 
 // Repetition as the search should see it. A position that already occurred after the search
@@ -796,9 +800,7 @@ void Engine::LoadPosition(std::string fen)
 	// Repetition counts from a previous position must not leak into this one
 	// (UCI resends the whole game with every "position" command).
 	positionStack.clear();
-	positionCounts.clear();
 	positionStack.push_back(zobristKey);
-	positionCounts[zobristKey] = 1;
 }
 
 void Engine::AppendUndoList(BoardState state, const Move move)
@@ -828,13 +830,6 @@ void Engine::UndoMove()
 
 	uint64_t top = positionStack.back();
 	positionStack.pop_back();
-
-	auto it = positionCounts.find(top);
-	if (it != positionCounts.end())
-	{
-		if (--(it->second) == 0)
-			positionCounts.erase(it);
-	}
 
 	BoardState lastState = undoHistory.back();
 	undoHistory.pop_back();
@@ -964,7 +959,6 @@ void Engine::MakeNullMove()
 	if (blackCastlingRights[0]) zobristKey ^= zobrist.castling[3];
 
 	positionStack.push_back(zobristKey);
-	positionCounts[zobristKey] += 1;
 }
 
 void Engine::UndoNullMove()
@@ -972,7 +966,6 @@ void Engine::UndoNullMove()
 	BoardState lastState = undoHistory.back();
 	undoHistory.pop_back();
 
-	positionCounts[zobristKey] -= 1;
 	positionStack.pop_back();
 
 	ChangePlayers();
