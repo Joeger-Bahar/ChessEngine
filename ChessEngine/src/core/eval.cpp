@@ -161,144 +161,144 @@ int Eval(Color player, const Engine* engine)
 			phase += std::popcount(board.pieceBitboards[c][t]) * phaseWeights[t];
 	phase = std::min(phase, 24);
 
-	// TODO: Make this more cache friendly, like sq on the inside loop
-	for (int sq = 0; sq < 64; ++sq)
+	for (int color = 0; color < 2; ++color)
 	{
-		for (int color = 0; color < 2; ++color)
+		for (int t = 0; t < 6; ++t)
 		{
-			for (int t = 0; t < 6; ++t)
+			Bitboard pieces = board.pieceBitboards[color][t];
+			while (pieces)
 			{
-				if (IsSet(board.pieceBitboards[color][t], sq))
+				int sq = std::countr_zero(pieces); // Lowest set bit
+				pieces &= pieces - 1; // Clear the bit
+
+				Pieces type = static_cast<Pieces>(t + 1);
+				bool isWhite = (color == 0);
+				int value = pieceValues[t + 1];
+				int mirroredSq = Mirror(sq);
+
+				if (isWhite)
+					materialScore += value;
+				else
+					materialScore -= value;
+
+				switch (type)
 				{
-					Pieces type = static_cast<Pieces>(t + 1);
-					bool isWhite = (color == 0);
-					int value = pieceValues[t + 1];
-					int mirroredSq = Mirror(sq);
+				case Pieces::PAWN:
+				{
+					if (isWhite) pieceActivityScore += pawnPST[sq];
+					else         pieceActivityScore -= pawnPST[mirroredSq];
 
+					int col = ToCol(sq);
+					int row = ToRow(sq);
+					Bitboard fileMask = FILE_MASK[col];
+					Bitboard leftMask = (col > 0) ? FILE_MASK[col - 1] : 0ULL;
+					Bitboard rightMask = (col < 7) ? FILE_MASK[col + 1] : 0ULL;
+
+					Bitboard sameFile = board.pieceBitboards[color][(int)Pieces::PAWN - 1] & fileMask;
+					Bitboard adjFiles = board.pieceBitboards[color][(int)Pieces::PAWN - 1] & (leftMask | rightMask);
+					Bitboard enemyPawns = board.pieceBitboards[1 - color][(int)Pieces::PAWN - 1];
+
+					// Doubled pawns
+					if (std::popcount(sameFile) > 1) // Must count all 64 bits: __popcnt only sees ranks 8-5
+					{
+						pieceActivityScore += isWhite ? -doubledPenalty : doubledPenalty;
+					}
+
+					// Isolated pawns
+					if (adjFiles == 0ULL)
+					{
+						pieceActivityScore += isWhite ? -isolatedPenalty : isolatedPenalty;
+					}
+
+					// Passed pawns
+					Bitboard blockingPawns = enemyPawns & (fileMask | leftMask | rightMask);
+					Bitboard inFrontEnemyPawns = 0ULL;
+					// Every square ahead on this file and both neighbouring files (it used to be this file only)
 					if (isWhite)
-						materialScore += value;
+					{
+						for (int r = row - 1; r >= 0; --r)
+							inFrontEnemyPawns |= (0xFFULL << (8 * r));
+					}
 					else
-						materialScore -= value;
-
-					switch (type)
 					{
-					case Pieces::PAWN:
+						for (int r = row + 1; r < 8; ++r)
+							inFrontEnemyPawns |= (0xFFULL << (8 * r));
+					}
+					if ((blockingPawns & inFrontEnemyPawns) == 0ULL)
 					{
-						if (isWhite) pieceActivityScore += pawnPST[sq];
-						else         pieceActivityScore -= pawnPST[mirroredSq];
-
-						int col = ToCol(sq);
-						int row = ToRow(sq);
-						Bitboard fileMask = FILE_MASK[col];
-						Bitboard leftMask = (col > 0) ? FILE_MASK[col - 1] : 0ULL;
-						Bitboard rightMask = (col < 7) ? FILE_MASK[col + 1] : 0ULL;
-
-						Bitboard sameFile = board.pieceBitboards[color][(int)Pieces::PAWN - 1] & fileMask;
-						Bitboard adjFiles = board.pieceBitboards[color][(int)Pieces::PAWN - 1] & (leftMask | rightMask);
-						Bitboard enemyPawns = board.pieceBitboards[1 - color][(int)Pieces::PAWN - 1];
-
-						// Doubled pawns
-						if (std::popcount(sameFile) > 1) // Must count all 64 bits: __popcnt only sees ranks 8-5
-						{
-							pieceActivityScore += isWhite ? -doubledPenalty : doubledPenalty;
-						}
-
-						// Isolated pawns
-						if (adjFiles == 0ULL)
-						{
-							pieceActivityScore += isWhite ? -isolatedPenalty : isolatedPenalty;
-						}
-
-						// Passed pawns
-						Bitboard blockingPawns = enemyPawns & (fileMask | leftMask | rightMask);
-						Bitboard inFrontEnemyPawns = 0ULL;
-						// Every square ahead on this file and both neighbouring files (it used to be this file only)
-						if (isWhite)
-						{
-							for (int r = row - 1; r >= 0; --r)
-								inFrontEnemyPawns |= (0xFFULL << (8 * r));
-						}
-						else
-						{
-							for (int r = row + 1; r < 8; ++r)
-								inFrontEnemyPawns |= (0xFFULL << (8 * r));
-						}
-						if ((blockingPawns & inFrontEnemyPawns) == 0ULL)
-						{
-							pieceActivityScore += isWhite ? passedBonus : -(passedBonus);
-						}
-
-						break;
+						pieceActivityScore += isWhite ? passedBonus : -(passedBonus);
 					}
-					case Pieces::KNIGHT:
+
+					break;
+				}
+				case Pieces::KNIGHT:
+				{
+					if (isWhite) pieceActivityScore += knightPST[sq];
+					else         pieceActivityScore -= knightPST[Mirror(sq)];
+					break;
+				}
+				case Pieces::BISHOP:
+				{
+					if (isWhite) pieceActivityScore += bishopPST[sq];
+					else         pieceActivityScore -= bishopPST[Mirror(sq)];
+
+					// +30 if both colors of bishop are present
+					Bitboard bishops = board.pieceBitboards[color][(int)Pieces::BISHOP - 1];
+					Bitboard lightSquares = 0x55AA55AA55AA55AAULL; // Light square mask
+					Bitboard darkSquares = 0xAA55AA55AA55AA55ULL;  // Dark square mask
+					if ((bishops & lightSquares) && (bishops & darkSquares))
 					{
-						if (isWhite) pieceActivityScore += knightPST[sq];
-						else         pieceActivityScore -= knightPST[Mirror(sq)];
-						break;
+						pieceActivityScore += isWhite ? 30 : -30;
 					}
-					case Pieces::BISHOP:
-					{
-						if (isWhite) pieceActivityScore += bishopPST[sq];
-						else         pieceActivityScore -= bishopPST[Mirror(sq)];
+					break;
+				}
+				case Pieces::ROOK:
+				{
+					if (isWhite) pieceActivityScore += rookPST[sq];
+					else         pieceActivityScore -= rookPST[Mirror(sq)];
 
-						// +30 if both colors of bishop are present
-						Bitboard bishops = board.pieceBitboards[color][(int)Pieces::BISHOP - 1];
-						Bitboard lightSquares = 0x55AA55AA55AA55AAULL; // Light square mask
-						Bitboard darkSquares = 0xAA55AA55AA55AA55ULL;  // Dark square mask
-						if ((bishops & lightSquares) && (bishops & darkSquares))
-						{
-							pieceActivityScore += isWhite ? 30 : -30;
-						}
-						break;
-					}
-					case Pieces::ROOK:
+					// +25 if on open file, +15 if on semi-open file
+					int col = ToCol(sq);
+					Bitboard fileMask = FILE_MASK[col];
+					Bitboard friendlyPawns = board.pieceBitboards[color][(int)Pieces::PAWN - 1];
+					Bitboard enemyPawns = board.pieceBitboards[1 - color][(int)Pieces::PAWN - 1];
+					if ((friendlyPawns & fileMask) == 0ULL && (enemyPawns & fileMask) == 0ULL)
 					{
-						if (isWhite) pieceActivityScore += rookPST[sq];
-						else         pieceActivityScore -= rookPST[Mirror(sq)];
-
-						// +25 if on open file, +15 if on semi-open file
-						int col = ToCol(sq);
-						Bitboard fileMask = FILE_MASK[col];
-						Bitboard friendlyPawns = board.pieceBitboards[color][(int)Pieces::PAWN - 1];
-						Bitboard enemyPawns = board.pieceBitboards[1 - color][(int)Pieces::PAWN - 1];
-						if ((friendlyPawns & fileMask) == 0ULL && (enemyPawns & fileMask) == 0ULL)
-						{
-							pieceActivityScore += isWhite ? 25 : -25;
-						}
-						else if ((friendlyPawns & fileMask) == 0ULL)
-						{
-							pieceActivityScore += isWhite ? 15 : -15;
-						}
-
-						// +25 if on same file as other rook
-						Bitboard rooks = board.pieceBitboards[color][(int)Pieces::ROOK - 1];
-						if (std::popcount(rooks & fileMask) > 1)
-						{
-							pieceActivityScore += isWhite ? 25 : -25;
-						}
-
-						// +30 if on 7th rank
-						int row = ToRow(sq);
-						if ((isWhite && row == 1) || (!isWhite && row == 6))
-						{
-							pieceActivityScore += isWhite ? 30 : -30;
-						}
-						break;
+						pieceActivityScore += isWhite ? 25 : -25;
 					}
-					case Pieces::QUEEN:
+					else if ((friendlyPawns & fileMask) == 0ULL)
 					{
-						if (isWhite) pieceActivityScore += queenPST[sq];
-						else         pieceActivityScore -= queenPST[Mirror(sq)];
-						break;
+						pieceActivityScore += isWhite ? 15 : -15;
 					}
-					case Pieces::KING:
+
+					// +25 if on same file as other rook
+					Bitboard rooks = board.pieceBitboards[color][(int)Pieces::ROOK - 1];
+					if (std::popcount(rooks & fileMask) > 1)
 					{
-						int kingSq = isWhite ? sq : Mirror(sq);
-						int kingScore = (kingPST_mg[kingSq] * phase + kingPST_eg[kingSq] * (24 - phase)) / 24;
-						pieceActivityScore += isWhite ? kingScore : -kingScore;
-						break;
+						pieceActivityScore += isWhite ? 25 : -25;
 					}
+
+					// +30 if on 7th rank
+					int row = ToRow(sq);
+					if ((isWhite && row == 1) || (!isWhite && row == 6))
+					{
+						pieceActivityScore += isWhite ? 30 : -30;
 					}
+					break;
+				}
+				case Pieces::QUEEN:
+				{
+					if (isWhite) pieceActivityScore += queenPST[sq];
+					else         pieceActivityScore -= queenPST[Mirror(sq)];
+					break;
+				}
+				case Pieces::KING:
+				{
+					int kingSq = isWhite ? sq : Mirror(sq);
+					int kingScore = (kingPST_mg[kingSq] * phase + kingPST_eg[kingSq] * (24 - phase)) / 24;
+					pieceActivityScore += isWhite ? kingScore : -kingScore;
+					break;
+				}
 				}
 			}
 		}
