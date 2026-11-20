@@ -708,14 +708,11 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	OrderMoves(moves, ply, false);
 
 	// If we probed a move from TT, move it to the front
-	// TODO: Change this so its rotated, not swapped
 	if (ttMove)
 	{
-		auto it = std::find_if(moves.begin(), moves.end(), [&](const Move& mv) {
-			return mv == ttMove;
-			});
+		std::vector<Move>::iterator it = std::find(moves.begin(), moves.end(), (Move)ttMove);
 		if (it != moves.end())
-			std::swap(moves[0], *it);
+			std::rotate(moves.begin(), it, it + 1); // TT move first, shift others down
 	}
 
 	int originalAlpha = alpha;
