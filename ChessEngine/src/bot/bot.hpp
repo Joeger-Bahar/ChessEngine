@@ -18,6 +18,7 @@
 struct SearchStackEntry
 {
 	Move move = 0;
+	Move excludedMove = 0; // Move to skip during singular extension
 	int pieceIndex = -1; // color*6 + (type-1), -1 for null move
 	int staticEval = 0;
 	bool inCheck = false;

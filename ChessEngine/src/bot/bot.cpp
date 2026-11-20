@@ -565,10 +565,11 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// No TT cutoffs in PV nodes: they would cut the principal variation short. The probe still
 	// runs so the stored move can be searched first.
 	// TODO: Use this score instead of staticEval
-	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode)
+	bool excluded = ss->excludedMove != 0;
+	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode && !excluded)
 		return ScoreFromTT(ttScore, ply);
 
-	if (!pvNode && !inCheck)
+	if (!pvNode && !inCheck && !excluded)
 	{
 		// Razoring
 		const int RAZORING_MARGIN = 300;
@@ -582,7 +583,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	// Reverse futility pruning
 	int RFP_MARGIN = 80; // 80 centipawns to assume to opponent can't recover
-	if (!pvNode && !inCheck && depth <= 7
+	if (!pvNode && !inCheck && !excluded && depth <= 7
 		&& staticEval - RFP_MARGIN * std::max(0, depth - improving) >= beta
 		&& staticEval < MATE_VAL - MAX_PLY)
 		return (staticEval + beta) / 2; // Blend to be a bit safer
@@ -596,7 +597,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		board.pieceBitboards[c][(int)Pieces::ROOK - 1] |
 		board.pieceBitboards[c][(int)Pieces::QUEEN - 1]) != 0;
 
-	if (depth >= 3 && !pvNode && !inCheck && hasNonPawn && staticEval >= beta && !(ss - 1)->nullMove)
+	if (depth >= 3 && !pvNode && !inCheck && !excluded && hasNonPawn && staticEval >= beta && !(ss - 1)->nullMove)
 	{
 		// Adaptive reduction
 		int reduction = 2 + depth / 4 + std::min((staticEval - beta) / 200, 2);
@@ -620,7 +621,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// ProbCut, if a capture beats beta by a big margin even in a shallow search,
 	// the full search would probably fail high too
 	const int probCutBeta = beta + 200;
-	if (!pvNode && !inCheck && depth >= 5 && std::abs(beta) < MATE_VAL - MAX_PLY)
+	if (!pvNode && !inCheck && !excluded && depth >= 5 && std::abs(beta) < MATE_VAL - MAX_PLY)
 	{
 		TTEntry entry;
 		bool ttSaysNo = tt.ttLookup(key, entry) && entry.depth >= depth - 3
@@ -665,6 +666,30 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		}
 	}
 
+	// Singular extension. If every move except TT fails below TT score
+	// the TT move is the only good move so search it one ply deeper
+	int singularExtension = 0;
+	TTEntry ttEntry;
+	if (!excluded && ttMove && depth >= 6 && ply < 2 * rootDepth
+		&& tt.ttLookup(key, ttEntry)
+		&& ttEntry.depth >= depth - 3
+		&& ttEntry.flag != TT_ALPHA // Score is exact or lower bound
+		&& std::abs(ttEntry.score) < MATE_VAL - MAX_PLY)
+	{
+		int singularBeta = ttEntry.score - 2 * depth;
+		int singularDepth = (depth - 1) / 2;
+
+		ss->excludedMove = ttMove;
+		int score = Search(singularDepth, ply, singularBeta - 1, singularBeta);
+		ss->excludedMove = 0;
+		if (quitEarly) return alpha;
+
+		if (score < singularBeta)
+			singularExtension = 1; // No move comes close, extend the TT move
+		else if (singularBeta >= beta)
+			return singularBeta; // Multicut. Without TT move, anothre move beats beta
+	}
+
 	std::vector<Move> pseudoMoves;
 	pseudoMoves.reserve(256);
 	Movegen::GetAllMoves(pseudoMoves, movingColor, engine->GetBitboardBoard(), engine);
@@ -683,6 +708,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	OrderMoves(moves, ply, false);
 
 	// If we probed a move from TT, move it to the front
+	// TODO: Change this so its rotated, not swapped
 	if (ttMove)
 	{
 		auto it = std::find_if(moves.begin(), moves.end(), [&](const Move& mv) {
@@ -716,6 +742,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// Loop through moves
 	for (const Move& move : moves)
 	{
+		// Skip excluded move
+		if (move == ss->excludedMove)
+			continue;
+
 		bool captureMove = MoveIsCapture(move, engine->GetBitboardBoard());
 		bool isKillerMove = (move == killerMoves[ply][0] || move == killerMoves[ply][1]);
 		bool isQuiet = !captureMove && GetPromotion(move) == (int)Pieces::NONE;
@@ -756,6 +786,8 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		int eval;
 
 		int newDepth = depth - 1;
+		if (move == ttMove)
+			newDepth += singularExtension;
 
 		previousMoves[ply + 1] = move;
 
@@ -877,6 +909,8 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// Check checkmate/stalemate
 	if (!foundLegal)
 	{
+		// Excluded was only legal move
+		if (excluded) return alpha;
 		engine->CheckKingInCheck();
 		if (engine->InCheck(movingColor))
 		{
@@ -891,7 +925,9 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	else if (bestScore >= beta) flag = TT_BETA;
 	else flag = TT_EXACT;
 
-	tt.ttStore(key, depth, ScoreToTT(bestScore, ply), bestMove32, flag);
+	if (!excluded)
+		tt.ttStore(key, depth, ScoreToTT(bestScore, ply), bestMove32, flag);
+
 	return bestScore;
 }
 
