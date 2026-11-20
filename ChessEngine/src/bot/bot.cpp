@@ -307,6 +307,68 @@ void Bot::Clear()
 	memset(captureHistory, 0, sizeof(captureHistory));
 }
 
+// One UCI "info" line per finished iteration. CuteChess shows it and uses the score to adjudicate
+// games. It's also a quick way to compare two builds: if they reach the same depth with the same
+// node count, they ran the same search, and only the time should differ.
+void Bot::PrintInfo(int depth, int score, Move rootMove)
+{
+	long long ms = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
+	long long nps = (long long)nodesSearched * 1000 / std::max(ms, 1LL);
+
+	std::cout << "info depth " << depth;
+	if (std::abs(score) >= MATE_VAL - MAX_PLY)
+	{
+		// Mate scores count plies; UCI wants full moves, negative when we're the side getting mated
+		int plies = MATE_VAL - std::abs(score);
+		std::cout << " score mate " << (score > 0 ? (plies + 1) / 2 : -(plies / 2));
+	}
+	else
+		std::cout << " score cp " << score;
+
+	std::cout << " nodes " << nodesSearched << " nps " << nps << " time " << ms
+		<< " pv " << GetPV(rootMove, depth) << std::endl; // endl flushes, so the GUI sees it right away
+}
+
+// The principal variation: the root move, then the best move stored in the TT for each position
+// after it. Every move is checked to be legal before it's played. The walk stops at the first
+// missing entry, at a draw (so a repetition can't loop), or after maxLength moves, and then
+// every move is undone again.
+std::string Bot::GetPV(Move rootMove, int maxLength)
+{
+	std::string pv = MoveToUCI(rootMove);
+	engine->MakeMove(rootMove);
+	int played = 1;
+
+	std::vector<Move> moves;
+	while (played < maxLength && !engine->IsDraw())
+	{
+		Move move = tt.GetBestMove(engine->GetZobristKey());
+		if (MoveIsNull(move))
+			break;
+
+		Color us = GameState::currentPlayer;
+		Movegen::GetAllMoves(moves, us, engine->GetBitboardBoard(), engine);
+		if (std::find(moves.begin(), moves.end(), move) == moves.end())
+			break; // Not a move in this position
+
+		engine->MakeMove(move);
+		if (engine->InCheck(us)) // Illegal
+		{
+			engine->UndoMove();
+			break;
+		}
+
+		pv += ' ';
+		pv += MoveToUCI(move);
+		++played;
+	}
+
+	while (played-- > 0)
+		engine->UndoMove();
+
+	return pv;
+}
+
 Move Bot::GetMoveUCI(int timeForMove)
 {
 	timePerTurn = timeForMove;
@@ -319,7 +381,7 @@ Move Bot::GetMove()
 	Move bookMove = GetBookMove(engine, "res/openings.bin");
 	if (!MoveIsNull(bookMove))
 	{
-		std::cout << "Using opening move\n";
+		std::cout << "info string Using opening move" << std::endl;
 		return bookMove; // Play instantly
 	}
 
@@ -358,7 +420,6 @@ Move Bot::GetMove()
 
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
-		std::cout << "Depth: " << depth << '\n';
 		rootDepth = depth;
 		bool foundLegal = false;
 
@@ -489,6 +550,10 @@ Move Bot::GetMove()
 			}
 		}
 
+		// Report the finished iteration (an unfinished one has already left the loop)
+		if (foundLegal)
+			PrintInfo(depth, bestScore, bestMove);
+
 		// Extradite mate for bot
 		// Cast to avoid integer overflow
 		if ((long long)bestScore >= (MATE_VAL - MAX_PLY))
@@ -505,7 +570,7 @@ Move Bot::GetMove()
 			break;
 	}
 
-	std::cout << "Making " << MoveToUCI(bestMove) << " with score " << bestScore << '\n';
+	std::cout << "info string Making " << MoveToUCI(bestMove) << " with score " << bestScore << std::endl;
 	nodesSearched = 0;
 
 	Piece movingPiece = engine->GetBoard()[GetStart(bestMove)].GetPiece();

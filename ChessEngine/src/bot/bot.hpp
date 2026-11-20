@@ -44,6 +44,10 @@ private:
 	int ScoreMove(const Move move, int ply, bool onlyMVVLVA);
 	void OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove = Move());
 
+	// UCI output
+	void PrintInfo(int depth, int score, Move rootMove);
+	std::string GetPV(Move rootMove, int maxLength);
+
 	TranspositionTable tt;
 	// [color][pieces][start square][end square]
 	int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
