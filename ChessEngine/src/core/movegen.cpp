@@ -250,10 +250,8 @@ void Movegen::GetAllMoves(std::vector<Move>& moves, Color color, const BitboardB
 						continue;
 
 					// Checks
-					engine->MakeMove(move);
-					if (engine->InCheck(GameState::currentPlayer))
+					if (engine->GivesCheck(move))
 						moves.push_back(move);
-					engine->UndoMove();
 				}
 				else
 					moves.push_back(move);
