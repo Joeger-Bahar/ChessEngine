@@ -150,14 +150,7 @@ int Eval(Color player, const Engine* engine)
 	// Pawn structure masks
 	const int doubledPenalty = 15;
 	const int isolatedPenalty = 20;
-	const int backwardPenalty = 20;
 	const int passedBonus = 20;
-	const int islandPenalty = 10;
-	const int connectedPawnBonus = 15;
-	const int advancedPawnBonus = 10; // every pawn pass rank 5
-
-	// Mobility scaling
-	//const int mobilityBonus = 5; // per legal square
 
 	// Game phase from remaining material (24 = all pieces, 0 = bare kings), used to blend the king
 	// tables. GameState::endgame can't be used: it is never updated in UCI mode and never reset.
@@ -232,21 +225,6 @@ int Eval(Color player, const Engine* engine)
 						}
 						if ((blockingPawns & inFrontEnemyPawns) == 0ULL)
 						{
-							// base bonus, +10 if rank 5, +25 if rank 6, and +60 if rank 7
-							//int rankBonus = 0;
-							//if (isWhite)
-							//{
-							//	if (row == 3) rankBonus = 10;
-							//	else if (row == 2) rankBonus = 25;
-							//	else if (row == 1) rankBonus = 60;
-							//}
-							//else
-							//{
-							//	if (row == 4) rankBonus = 10;
-							//	else if (row == 5) rankBonus = 25;
-							//	else if (row == 6) rankBonus = 60;
-							//}
-
 							pieceActivityScore += isWhite ? passedBonus : -(passedBonus);
 						}
 
@@ -256,11 +234,6 @@ int Eval(Color player, const Engine* engine)
 					{
 						if (isWhite) pieceActivityScore += knightPST[sq];
 						else         pieceActivityScore -= knightPST[Mirror(sq)];
-
-						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
-						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
-						//int mobility = __builtin_popcount(attacks);
-						//score += isWhite ? mobility * mobilityBonus : -mobility * mobilityBonus;
 						break;
 					}
 					case Pieces::BISHOP:
@@ -276,16 +249,6 @@ int Eval(Color player, const Engine* engine)
 						{
 							pieceActivityScore += isWhite ? 30 : -30;
 						}
-						// -5 for every friendly pawn on the same color square as the bishop
-						//Bitboard pawns = board.pieceBitboards[color][(int)Pieces::PAWN - 1];
-						//Bitboard sameColorPawns = (IsSet(lightSquares, sq)) ? (pawns & lightSquares) : (pawns & darkSquares);
-						//int numSameColorPawns = __builtin_popcount(sameColorPawns);
-						//score += isWhite ? -5 * numSameColorPawns : 5 * numSameColorPawns;
-
-						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
-						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
-						//int mobility = __builtin_popcount(attacks);
-						//score += isWhite ? mobility * mobilityBonus : -mobility * mobilityBonus;
 						break;
 					}
 					case Pieces::ROOK:
@@ -320,41 +283,14 @@ int Eval(Color player, const Engine* engine)
 						{
 							pieceActivityScore += isWhite ? 30 : -30;
 						}
-
-						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
-						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
-						//int mobility = __builtin_popcount(attacks);
-						//score += isWhite ? mobility * mobilityBonus : -mobility * mobilityBonus;
 						break;
 					}
 					case Pieces::QUEEN:
 					{
 						if (isWhite) pieceActivityScore += queenPST[sq];
 						else         pieceActivityScore -= queenPST[Mirror(sq)];
-
-						//Bitboard attacks = Movegen::GetPseudoAttacks(type, sq, allOcc, isWhite);
-						//attacks &= ~((isWhite) ? whiteOcc : blackOcc);
-						//int mobility = __builtin_popcount(attacks);
-						//score += isWhite ? mobility * mobilityBonus : -mobility * mobilityBonus;
 						break;
 					}
-
-					//case Pieces::KNIGHT:
-					//	if (isWhite) score += knightPST[sq];
-					//	else         score -= knightPST[mirroredSq];
-					//	break;
-					//case Pieces::BISHOP:
-					//	if (isWhite) score += bishopPST[sq];
-					//	else         score -= bishopPST[mirroredSq];
-					//	break;
-					//case Pieces::ROOK:
-					//	if (isWhite) score += rookPST[sq];
-					//	else         score -= rookPST[mirroredSq];
-					//	break;
-					//case Pieces::QUEEN:
-					//	if (isWhite) score += queenPST[sq];
-					//	else         score -= queenPST[mirroredSq];
-					//	break;
 					case Pieces::KING:
 					{
 						int kingSq = isWhite ? sq : Mirror(sq);
