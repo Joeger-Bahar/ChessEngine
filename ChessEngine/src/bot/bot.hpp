@@ -30,7 +30,7 @@ class Bot
 public:
 	Bot(Engine* engine, Color color);
 	Move GetMove();
-	Move GetMoveUCI(int timeForMove);
+	Move GetMoveUCI(int timeForMove, int softTime = -1);
 	void SetColor(Color color);
 	const Color GetColor() const { return botColor; }
 
@@ -73,5 +73,6 @@ private:
 	int nodesSearched;
 	int rootDepth = 0;
 	int timePerTurn = 12000; // In milliseconds
+	int softTime = -1;
 	bool quitEarly = false;
 };

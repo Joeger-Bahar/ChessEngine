@@ -369,9 +369,10 @@ std::string Bot::GetPV(Move rootMove, int maxLength)
 	return pv;
 }
 
-Move Bot::GetMoveUCI(int timeForMove)
+Move Bot::GetMoveUCI(int timeForMove, int softTime)
 {
 	timePerTurn = timeForMove;
+	this->softTime = softTime;
 	Move move = GetMove();
 	return move;
 }
@@ -567,6 +568,10 @@ Move Bot::GetMove()
 
 		// Stop searching if time limit is reached
 		if (timePerTurn >= 0 && elapsed >= timePerTurn)
+			break;
+
+		// The next depth would probably take 2-3x longer, so don't start it
+		if (softTime >= 0 && elapsed >= softTime)
 			break;
 	}
 

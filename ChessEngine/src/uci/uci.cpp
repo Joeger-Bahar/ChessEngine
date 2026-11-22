@@ -149,7 +149,8 @@ void Uci::HandleGo(std::istringstream& iss)
     int myTime = (us == Color::WHITE ? wtime : btime);
     int myInc = (us == Color::WHITE ? winc : binc);
 
-    int timeForMove = 0; // ms we allocate to this move
+    int timeForMove = 0; // Hard limit, search stops here during a serach
+    int softTime = -1; // Soft limit, don't start new search
 
     if (movetime > 0)
     {
@@ -165,22 +166,28 @@ void Uci::HandleGo(std::istringstream& iss)
     {
         // --- Regular timed games (sudden death, increment, or moves in X time) ---
 
-        int movesLeft = movestogo > 0 ? movestogo : 40; // Estimate if unknown
+        int movesLeft = movestogo > 0 ? movestogo : 30; // Estimate if unknown
 
-        // Base allocation: divide remaining time by moves left
-        timeForMove = myTime / movesLeft;
+        // Time we should spend on this move, on average
+        int target = myTime / movesLeft + myInc * 3 / 4;
+        
+        // Don't start a new depth at 60% of the target time
+        softTime = target * 60 / 100;
 
-        // Add a fraction of increment (don’t spend it all)
-        timeForMove += static_cast<int>(0.6 * myInc);
+        // Never use more than 1/4 of the clock
+        timeForMove = target * 3;
+        if (timeForMove > myTime / 4)
+            timeForMove = myTime / 4;
 
-        // Safety: don’t use more than 1/10 of remaining time on any single move
-        int maxCap = myTime / 10;
-        if (timeForMove > maxCap)
-            timeForMove = maxCap;
-
-        // Never drop below a small minimum
-        if (timeForMove < 10)
-            timeForMove = 10;
+        // Keep a little time for GUI communication
+        int overhead = myTime / 20;
+        if (overhead > 30)
+            overhead = 30;
+        timeForMove -= overhead;
+        if (timeForMove < 5)
+            timeForMove = 5;
+        if (softTime > timeForMove)
+            softTime = timeForMove;
     }
     else
     {
@@ -188,10 +195,8 @@ void Uci::HandleGo(std::istringstream& iss)
         timeForMove = 1000; // default 1 second
     }
 
-    int moveOverhead = ((float)timeForMove * 0.05); // Stop 5% early to prevent the engine going barely over on time
-
     bot->SetColor(us);
-    Move bestMove = bot->GetMoveUCI(timeForMove - moveOverhead);
+    Move bestMove = bot->GetMoveUCI(timeForMove, softTime);
 
     std::cout << "bestmove " << MoveToUCI(bestMove) << std::endl;
     std::cout.flush();
