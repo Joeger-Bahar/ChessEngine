@@ -1026,6 +1026,24 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	if (engine->IsDraw())
 		return 0;
 
+	bool pvNode = (beta - alpha) > 1;
+	uint64_t key = engine->GetZobristKey();
+	int ttScore = 0;
+	uint32_t ttMove = 0;
+	if (tt.ttProbe(key, 0, alpha, beta, ttScore, ttMove) && !pvNode)
+		return ScoreFromTT(ttScore, ply);
+
+	auto storeTT = [&](int score, uint8_t flag, Move move)
+	{
+		TTEntry existing;
+		if (tt.ttLookup(key, existing) && existing.depth > 0)
+			return;
+		tt.ttStore(key, 0, ScoreToTT(score, ply), move, flag);
+	};
+
+	const int originalAlpha = alpha;
+	Move bestMove = Move();
+
 	int bestScore = -INF;
 
 	bool inCheck = engine->InCheck(movingColor);
@@ -1033,7 +1051,10 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	{
 		int standPat = Eval(movingColor, engine);
 		if (standPat >= beta)
+		{
+			storeTT(standPat, TT_BETA, 0);
 			return standPat;
+		}
 		bestScore = standPat;
 		if (standPat > alpha)
 			alpha = standPat;
@@ -1043,6 +1064,13 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine,
 		!inCheck, !inCheck && qply >= 2);
 	OrderMoves(moves, ply, true);
+
+	if (ttMove)
+	{
+		std::vector<Move>::iterator it = std::find(moves.begin(), moves.end(), (Move)ttMove);
+		if (it != moves.end())
+			std::rotate(moves.begin(), it, it + 1);
+	}
 
 	bool foundLegal = false;
 
@@ -1067,9 +1095,16 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 			return alpha;
 
 		if (score >= beta)
+		{
+			storeTT(score, TT_BETA, move);
 			return score; // Cutoff
+		}
 
-		if (score > bestScore) bestScore = score;
+		if (score > bestScore)
+		{
+			bestScore = score;
+			bestMove = move;
+		}
 
 		if (score > alpha)
 			alpha = score;
@@ -1078,5 +1113,6 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	if (inCheck && !foundLegal)
 		return -(MATE_VAL - ply);
 
+	storeTT(bestScore, bestScore > originalAlpha ? TT_EXACT : TT_ALPHA, bestMove);
 	return bestScore;
 }
