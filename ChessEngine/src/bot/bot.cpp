@@ -419,6 +419,28 @@ Move Bot::GetMove()
 			return tbMove; // A null move means the probe failed: search normally instead
 	}
 
+	// Don't use up full time if only one forced move avaiable
+	if (timePerTurn >= 0)
+	{
+		std::vector<Move> rootMoves;
+		Movegen::GetAllMoves(rootMoves, botColor, engine->GetBitboardBoard(), engine);
+		Move onlyMove = Move();
+		int legalMoves = 0;
+		for (const Move& move : rootMoves)
+		{
+			engine->MakeMove(move);
+			bool legal = !engine->InCheck(botColor);
+			engine->UndoMove();
+			if (legal && ++legalMoves == 1)
+				onlyMove = move;
+		}
+		if (legalMoves == 1)
+		{
+			std::cout << "info string Only one legal move" << std::endl;
+			return onlyMove;
+		}
+	}
+
 	for (int depth = 1; depth <= maxDepth; ++depth)
 	{
 		rootDepth = depth;
@@ -815,8 +837,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 			// Futility pruning: even a good quiet move can't lift the static eval up to alpha
 			int lmrDepth = std::max(0, depth - 1 - lmrTable[std::min(depth, 63)][std::min(moveCount + 1, 63)]);
-			if (lmrDepth <= 6 && staticEval + 100 + 110 * lmrDepth <= alpha)
+			int futilityValue = staticEval + 100 + 110 * lmrDepth;
+			if (lmrDepth <= 6 && futilityValue <= alpha)
 			{
+				bestEval = std::max(bestEval, futilityValue);
 				skipQuiets = true;
 				continue;
 			}
@@ -925,7 +949,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			for (int i = 0; i < captureCount; ++i)
 				UpdateHistory(CaptureHistoryEntry(capturesTried[i]), -bonus);
 
-			if (!captureMove && (Pieces)GetPromotion(move) == Pieces::NONE && !opponentInCheck) // Beta cutoff = good
+			if (!captureMove && (Pieces)GetPromotion(move) == Pieces::NONE) // Beta cutoff = good
 			{
 				if (killerMoves[ply][0] != move)
 				{

@@ -52,6 +52,7 @@ public:
 	bool IsRepetitionDraw(int ply) const; // For the search: see engine.cpp
 	bool EnPassantCapturable(Color capturer) const; // See engine.cpp
 	bool Is50Move() const;
+	bool IsInsufficientMaterial() const;
 	bool GivesCheck(Move move) const;
 	inline const bool IsOver() const { return GameState::checkmate || GameState::draw; }
 	inline const bool InCheck(Color color) { return (GameState::checkStatus & (IsWhite(color) ? 0b10 : 0b01)) != 0; }

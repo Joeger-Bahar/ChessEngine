@@ -540,7 +540,7 @@ void Engine::MakeMove(const Move move)
 bool Engine::IsDraw() const
 {
 	if (draw) return true;
-	return (IsThreefold() || Is50Move());
+	return (IsThreefold() || Is50Move() || IsInsufficientMaterial());
 }
 
 bool Engine::IsThreefold() const
@@ -581,6 +581,22 @@ bool Engine::EnPassantCapturable(Color capturer) const
 bool Engine::Is50Move() const
 {
 	return (halfmoves >= 100);
+}
+
+bool Engine::IsInsufficientMaterial() const
+{
+	Bitboard heavy = 0;
+	for (int c = 0; c < 2; ++c)
+		heavy |= bitboards.pieceBitboards[c][(int)Pieces::PAWN - 1]
+			  | bitboards.pieceBitboards[c][(int)Pieces::ROOK - 1]
+			  | bitboards.pieceBitboards[c][(int)Pieces::QUEEN - 1];
+	if (heavy) return false;
+
+	Bitboard minors = 0;
+	for (int c = 0; c < 2; ++c)
+		minors |= bitboards.pieceBitboards[c][(int)Pieces::KNIGHT - 1]
+			   | bitboards.pieceBitboards[c][(int)Pieces::BISHOP - 1];
+	return (minors & (minors - 1)) == 0; // Zero or one minor piece
 }
 
 bool Engine::GivesCheck(Move move) const
