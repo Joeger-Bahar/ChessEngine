@@ -880,6 +880,18 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			if (opponentInCheck) reduction--;
 			if (isKillerMove)    reduction--;
 
+			// Reduce moves that have often caused cutoffs less
+			int piece = ss->pieceIndex;
+			int to = GetEnd(move);
+			int history = historyHeuristic[piece / 6][piece % 6][GetStart(move)][to];
+			for (int back = 1; back <= 2; ++back)
+			{
+				SearchStackEntry* prev = ss - back;
+				if (prev->pieceIndex >= 0)
+					history += contHistory[(prev->pieceIndex * 64 + GetEnd(prev->move)) * 768 + piece * 64 + to];
+			}
+			reduction -= history / 8192;
+
 			// Stop from jumping into qsearch
 			reduction = std::clamp(reduction, 0, newDepth - 1);
 		}
