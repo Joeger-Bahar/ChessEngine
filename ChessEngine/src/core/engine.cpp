@@ -558,7 +558,6 @@ bool Engine::HasRepeated() const
 // A position that only repeats the game before the root must occur a third time, as in the real game.
 bool Engine::IsRepetitionDraw(int ply) const
 {
-	if (IsThreefold()) return true;
 	int last = static_cast<int>(positionStack.size()) - 1;
 	int limit = min(ply - 1, halfmoves); // Nothing repeats across a capture or pawn move
 	for (int back = 4; back <= limit; back += 2)

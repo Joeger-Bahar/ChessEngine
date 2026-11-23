@@ -36,13 +36,14 @@ TranspositionTable::TranspositionTable(int megabytes)
     Clear();
 }
 
-bool TranspositionTable::ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove)
+bool TranspositionTable::ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove, int* outEval)
 {
     size_t idx = IndexFor(key);
     TTEntry& e = table[idx];
     if (e.key == key)
     {
         outMove = e.move32;
+        if (outEval) *outEval = e.eval;
         if (e.depth >= depth)
         {
             if (e.flag == TT_EXACT)
@@ -66,7 +67,7 @@ bool TranspositionTable::ttProbe(uint64_t key, int depth, int alpha, int beta, i
 }
 
 // store an entry
-void TranspositionTable::ttStore(uint64_t key, int depth, int score, uint32_t move32, uint8_t flag)
+void TranspositionTable::ttStore(uint64_t key, int depth, int score, uint32_t move32, uint8_t flag, int eval)
 {
     size_t idx = IndexFor(key);
     TTEntry& e = table[idx];
@@ -85,12 +86,17 @@ void TranspositionTable::ttStore(uint64_t key, int depth, int score, uint32_t mo
         if (move32 == 0 && e.key == key)
             move32 = e.move32;
 
+        if (eval == TT_NO_EVAL && e.key == key)
+            eval = e.eval;
+
         e.key = key;
         e.depth = depth;
         e.score = score;
         e.move32 = move32;
         e.flag = flag;
         e.age = currentAge;
+        e.eval = eval;
+
     }
 }
 

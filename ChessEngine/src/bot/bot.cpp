@@ -621,12 +621,12 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	uint32_t ttMove = 0; // ttProbe only writes these on a key match
 	// No TT cutoffs in PV nodes: they would cut the principal variation short. The probe still
 	// runs so the stored move can be searched first.
-	// TODO: Use this score instead of staticEval
 	bool excluded = ss->excludedMove != 0;
-	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove) && !pvNode && !excluded)
+	int ttEval = NO_EVAL;
+	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove, &ttEval) && !pvNode && !excluded)
 		return ScoreFromTT(ttScore, ply);
 
-	int staticEval = inCheck ? NO_EVAL : Eval(movingColor, engine);
+	int staticEval = inCheck ? NO_EVAL : (ttEval != NO_EVAL ? ttEval : Eval(movingColor, engine));
 	ss->staticEval = staticEval;
 	// If the eval has improved since our last term. Used for more aggressive pruning
 	bool improving = false;
@@ -730,7 +730,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 				if (quitEarly) return alpha;
 				if (score >= probCutBeta)
 				{
-					tt.ttStore(key, depth - 3, ScoreToTT(score, ply), move, TT_BETA);
+					tt.ttStore(key, depth - 3, ScoreToTT(score, ply), move, TT_BETA, staticEval);
 					return score;
 				}
 			}
@@ -763,19 +763,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	// Pseudo legal
 	std::vector<Move>& moves = moveLists[ply];
-	//std::vector<Move> pseudoMoves;
-	//pseudoMoves.reserve(256);
 	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
-
-	//moves.clear();
-
-	//for (const Move& move : pseudoMoves)
-	//{
-	//	engine->MakeMove(move);
-	//	if (!engine->InCheck(movingColor))
-	//		moves.push_back(move);
-	//	engine->UndoMove();
-	//}
 
 	OrderMoves(moves, ply, false);
 
@@ -847,6 +835,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
 
 		engine->MakeMove(move);
+
 		// Check for illegal moves
 		if (engine->InCheck(movingColor))
 		{
@@ -1013,7 +1002,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	else flag = TT_EXACT;
 
 	if (!excluded)
-		tt.ttStore(key, depth, ScoreToTT(bestScore, ply), bestMove32, flag);
+		tt.ttStore(key, depth, ScoreToTT(bestScore, ply), bestMove32, flag, staticEval);
 
 	return bestScore;
 }
@@ -1042,15 +1031,17 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	uint64_t key = engine->GetZobristKey();
 	int ttScore = 0;
 	uint32_t ttMove = 0;
-	if (tt.ttProbe(key, 0, alpha, beta, ttScore, ttMove) && !pvNode)
+	int ttEval = NO_EVAL;
+	if (tt.ttProbe(key, 0, alpha, beta, ttScore, ttMove, &ttEval) && !pvNode)
 		return ScoreFromTT(ttScore, ply);
 
+	int standPat = -INF;
 	auto storeTT = [&](int score, uint8_t flag, Move move)
 	{
 		TTEntry existing;
 		if (tt.ttLookup(key, existing) && existing.depth > 0)
 			return;
-		tt.ttStore(key, 0, ScoreToTT(score, ply), move, flag);
+		tt.ttStore(key, 0, ScoreToTT(score, ply), move, flag, standPat == -INF ? NO_EVAL : standPat);
 	};
 
 	const int originalAlpha = alpha;
@@ -1059,10 +1050,9 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	int bestScore = -INF;
 
 	bool inCheck = engine->InCheck(movingColor);
-	int standPat = -INF;
 	if (!inCheck)
 	{
-		standPat = Eval(movingColor, engine);
+		standPat = ttEval != NO_EVAL ? ttEval : Eval(movingColor, engine);
 		if (standPat >= beta)
 		{
 			storeTT(standPat, TT_BETA, 0);
@@ -1107,6 +1097,7 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 		}
 
 		engine->MakeMove(move);
+
 		if (engine->InCheck(movingColor))
 		{
 			engine->UndoMove();

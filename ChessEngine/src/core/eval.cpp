@@ -103,10 +103,7 @@ int queenPST[64] = {
 
 int Mirror(int sq)
 {
-	int row = ToRow(sq);
-	int col = ToCol(sq);
-	int mirroredRow = 7 - row;
-	return ToIndex(mirroredRow, col);
+	return sq ^ 56; // Flips the row but keeps the column
 }
 
 const Bitboard FILE_MASK[8] = {
@@ -212,18 +209,9 @@ int Eval(Color player, const Engine* engine)
 
 					// Passed pawns
 					Bitboard blockingPawns = enemyPawns & (fileMask | leftMask | rightMask);
-					Bitboard inFrontEnemyPawns = 0ULL;
-					// Every square ahead on this file and both neighbouring files (it used to be this file only)
-					if (isWhite)
-					{
-						for (int r = row - 1; r >= 0; --r)
-							inFrontEnemyPawns |= (0xFFULL << (8 * r));
-					}
-					else
-					{
-						for (int r = row + 1; r < 8; ++r)
-							inFrontEnemyPawns |= (0xFFULL << (8 * r));
-					}
+					Bitboard inFrontEnemyPawns = isWhite
+						? (row > 0 ? (1ULL << (8 * row)) - 1 : 0ULL)
+						: (row < 7 ? ~((1ULL << (8 * (row + 1))) - 1) : 0ULL);
 					if ((blockingPawns & inFrontEnemyPawns) == 0ULL)
 					{
 						pieceActivityScore += isWhite ? passedBonus : -(passedBonus);

@@ -64,8 +64,7 @@ uint8_t BoardCalculator::FindPiece(Piece piece, const BitboardBoard& board)
 
 bool BoardCalculator::IsEmptyAt(int sq, const BitboardBoard& board)
 {
-	Piece temp;
-	return !GetPieceAt(sq, board, temp); // Returns false if no piece there
+	return !IsSet(board.occupied, sq);
 }
 
 int BoardCalculator::TotalPieces(const BitboardBoard& board)

@@ -55,7 +55,7 @@ bool MoveIsCapture(Move m, const BitboardBoard& board)
 	int endSq = GetEnd(m);
 
 	if (IsCastle(m)) return false;
-	if (!BoardCalculator::IsEmptyAt(endSq, board)) return true;
+	if (IsSet(board.occupied, endSq)) return true; // Something on the end square
 	return IsEnPassant(m);
 }
 
