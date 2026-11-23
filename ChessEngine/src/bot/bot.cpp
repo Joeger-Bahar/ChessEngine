@@ -1047,9 +1047,10 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	int bestScore = -INF;
 
 	bool inCheck = engine->InCheck(movingColor);
+	int standPat = -INF;
 	if (!inCheck)
 	{
-		int standPat = Eval(movingColor, engine);
+		standPat = Eval(movingColor, engine);
 		if (standPat >= beta)
 		{
 			storeTT(standPat, TT_BETA, 0);
@@ -1079,6 +1080,19 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 		// Losing exchange
 		if (!inCheck && !SEE(move, 0))
 			continue;
+
+		// Delta pruning. If a free capture can't get score up to alpha
+		if (!inCheck && GetPromotion(move) == (int)Pieces::NONE && !engine->GivesCheck(move))
+		{
+			Piece captured = engine->GetBoard()[GetEnd(move)].GetPiece();
+			int gain = IsEnPassant(move) ? 100 : PieceValue(captured);
+			int futilityValue = standPat + gain + 200;
+			if (gain > 0 && futilityValue <= alpha)
+			{
+				bestScore = std::max(bestScore, futilityValue);
+				continue;
+			}
+		}
 
 		engine->MakeMove(move);
 		if (engine->InCheck(movingColor))
