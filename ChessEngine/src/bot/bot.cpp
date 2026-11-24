@@ -759,6 +759,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		}
 	}
 
+	// Internal iterative reduction. If there's no TT move, this position hasn't been searched
+	// so move ordering is poor and a search is expensive. So search it shallower.
+	int iirReduction = (depth >= 4 && !ttMove && !excluded) ? 1 : 0;
+
 	// Singular extension. If every move except TT fails below TT score
 	// the TT move is the only good move so search it one ply deeper
 	int singularExtension = 0;
@@ -873,7 +877,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		int eval;
 
-		int newDepth = depth - 1;
+		int newDepth = depth - 1 - iirReduction;
 		if (move == ttMove)
 			newDepth += singularExtension;
 
@@ -1026,7 +1030,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	else flag = TT_EXACT;
 
 	if (!excluded)
-		tt.ttStore(key, depth, ScoreToTT(bestScore, ply), bestMove32, flag, staticEval);
+		tt.ttStore(key, depth - iirReduction, ScoreToTT(bestScore, ply), bestMove32, flag, staticEval);
 
 	return bestScore;
 }
