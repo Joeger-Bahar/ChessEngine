@@ -25,6 +25,13 @@ public:
 	// Get's best move
 	Move GetMove(Engine* engine) const;
 
+	// WDL using bitboard instead of fen for the search.
+	// Returns +1 win, 0 draw, -1 loss for STM, -99 if can't be probed
+	int ProbeWDLSearch(const BitboardBoard& board, bool whiteToMove, int enPassantSquare) const;
+
+	// Most pieces the tables cover
+	int MaxPieces() const;
+
 private:
 	// Uses Fathom
 	// https://github.com/jdart1/Fathom.git

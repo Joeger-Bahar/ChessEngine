@@ -6,6 +6,13 @@ extern "C" {
 
 #include <iostream>
 #include <cstdint>
+#include <bit>
+#if defined(_MSC_VER)
+#include <stdlib.h>
+static inline uint64_t ByteSwap64(uint64_t x) { return _byteswap_uint64(x); }
+#else
+static inline uint64_t ByteSwap64(uint64_t x) { return __builtin_bswap64(x); }
+#endif
 
 #include "core/gamestate.hpp"
 #include "core/bitboard.hpp"
@@ -373,4 +380,40 @@ Move Tablebase::GetMove(Engine* engine) const
 
     Move m = EncodeMove(flipSquareVertical(from), flipSquareVertical(to), parsedPromo, ep != 0, false);
     return m;
+}
+
+int Tablebase::ProbeWDLSearch(const BitboardBoard& board, bool whiteToMove, int enPassantSquare) const
+{
+    if (!ok)
+        return -99;
+
+    // Fathom requires exactly 1 king per side
+    if (std::popcount(board.pieceBitboards[0][(int)Pieces::KING - 1]) != 1 ||
+        std::popcount(board.pieceBitboards[1][(int)Pieces::KING - 1]) != 1)
+        return -99;
+
+    // a8 = 0 for my engine, a1 = 0 for Fathom.
+    // Reverse the byte order for bitboards
+    auto both = [&](Pieces p)
+    {
+            return ByteSwap64(board.pieceBitboards[0][(int)p - 1] |
+                              board.pieceBitboards[1][(int)p - 1]);
+    };
+    uint32_t ep = enPassantSquare > 0 ? flipSquareVertical((uint32_t)enPassantSquare) : 0;
+
+    uint32_t result = tb_probe_wdl(
+        ByteSwap64(board.allPieces[0]), ByteSwap64(board.allPieces[1]),
+        both(Pieces::KING), both(Pieces::QUEEN), both(Pieces::ROOK),
+        both(Pieces::BISHOP), both(Pieces::KNIGHT), both(Pieces::PAWN),
+        0, 0, ep, whiteToMove);
+
+    if (result == TB_RESULT_FAILED) return -99;
+    if (result == TB_WIN) return 1;
+    if (result == TB_LOSS) return -1;
+    return 0; // Draw or a cursed/bless game
+}
+
+int Tablebase::MaxPieces() const
+{
+    return ok ? (int)TB_LARGEST : 0;
 }

@@ -10,6 +10,7 @@
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <bit>
 #include <Windows.h>
 #undef min
 #undef max
@@ -18,6 +19,7 @@ using namespace std::chrono;
 constexpr int INF = std::numeric_limits<int>::max() / 4;
 constexpr int MATE_VAL = 1000000;
 constexpr int NO_EVAL = -99999;
+constexpr int TB_WIN = MATE_VAL - 2 * MAX_PLY; // Tablebase win, above any eval but below mate
 
 static int ScoreToTT(int score, int ply)
 {
@@ -647,6 +649,27 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	int ttEval = NO_EVAL;
 	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove, &ttEval) && !pvNode && !excluded)
 		return ScoreFromTT(ttScore, ply);
+
+	// Check if the tablebase knows the exact result of this position
+	static const int tbPieces = tb.MaxPieces();
+	if (!excluded && tbPieces > 0 && GameState::halfmoves == 0
+		&& std::popcount(engine->GetBitboardBoard().occupied) <= tbPieces
+		&& !GameState::whiteCastlingRights[0] && !GameState::whiteCastlingRights[1]
+		&& !GameState::blackCastlingRights[0] && !GameState::blackCastlingRights[1])
+	{
+		int wdl = tb.ProbeWDLSearch(engine->GetBitboardBoard(), IsWhite(movingColor), GameState::enPassantTarget);
+		if (wdl != 99)
+		{
+			// A win is "at least this good", a loss "at most"
+			int score = wdl > 0 ? TB_WIN - ply : wdl < 0 ? -(TB_WIN - ply) : 0;
+			uint8_t bound = wdl > 0 ? TT_BETA : wdl < 0 ? TT_ALPHA : TT_EXACT;
+			if (bound == TT_EXACT || (bound == TT_BETA && score >= beta) || (bound == TT_ALPHA && score <= alpha))
+			{
+				tt.ttStore(key, std::min(depth + 6, MAX_PLY - 1), ScoreToTT(score, ply), 0, bound);
+				return score;
+			}
+		}
+	}
 
 	int staticEval = inCheck ? NO_EVAL : (ttEval != NO_EVAL ? ttEval : Eval(movingColor, engine));
 	ss->staticEval = staticEval;
