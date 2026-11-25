@@ -414,6 +414,10 @@ Move Bot::GetMove()
 	Move bestMove = Move();
 	int bestScore = -INF;
 
+	// Used for time management
+	Move previousBestMove = Move();
+	int previousScore = -INF;
+
 	if (tb.Probeable(engine->GetBitboardBoard()))
 	{
 		Move tbMove = tb.GetMove(engine);
@@ -594,8 +598,22 @@ Move Bot::GetMove()
 		if (timePerTurn >= 0 && elapsed >= timePerTurn)
 			break;
 
+		// If the best move changed or the score dropped, spend more time on this position
+		bool bestMoveChanged = !(bestMove == previousBestMove);
+		previousBestMove = bestMove;
+
+		double scale = 1.0;
+		if (depth >= 5)
+		{
+			if (bestMoveChanged)
+				scale = 1.5;
+			if (previousScore != -INF && bestScore < previousScore - 30)
+				scale *= 1.25;
+		}
+		previousScore = bestScore;
+
 		// The next depth would probably take 2-3x longer, so don't start it
-		if (softTime >= 0 && elapsed >= softTime)
+		if (softTime >= 0 && elapsed >= softTime * scale)
 			break;
 	}
 
@@ -658,7 +676,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		&& !GameState::blackCastlingRights[0] && !GameState::blackCastlingRights[1])
 	{
 		int wdl = tb.ProbeWDLSearch(engine->GetBitboardBoard(), IsWhite(movingColor), GameState::enPassantTarget);
-		if (wdl != 99)
+		if (wdl != -99)
 		{
 			// A win is "at least this good", a loss "at most"
 			int score = wdl > 0 ? TB_WIN - ply : wdl < 0 ? -(TB_WIN - ply) : 0;
