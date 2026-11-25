@@ -827,6 +827,7 @@ void Engine::AppendUndoList(BoardState state, const Move move)
 	state.enPassantTarget = (enPassantTarget == -1) ? 0 : enPassantTarget;
 	state.castlingRights = (whiteCastlingRights[0] << 3) | (whiteCastlingRights[1] << 2) | (blackCastlingRights[0] << 1) | (blackCastlingRights[1]);
 	state.halfmoveClock = halfmoves;
+	state.checkStatus = checkStatus;
 	state.wasEnPassant = IsEnPassant(move);
 	state.wasCastling = IsCastle(move);
 	state.playerToMove = IsWhite(currentPlayer);
@@ -932,7 +933,7 @@ void Engine::UndoMove()
 
 	// Couldn't be in check 2 moves in a row
 	// Reset if game status
-	checkStatus = 0;
+	checkStatus = lastState.checkStatus;
 	invalidMove = false;
 	checkmate = false;
 	draw = false;
@@ -996,6 +997,7 @@ void Engine::UndoNullMove()
 	blackCastlingRights[0] = (lastState.castlingRights & 0b0010) != 0;
 	blackCastlingRights[1] = (lastState.castlingRights & 0b0001) != 0;
 	halfmoves = lastState.halfmoveClock;
+	checkStatus = lastState.checkStatus;
 	draw = false;
 
 	zobristKey = lastState.zobristKey; // restore full hash

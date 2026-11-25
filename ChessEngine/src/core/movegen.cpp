@@ -197,6 +197,55 @@ void Movegen::GetAllMoves(std::vector<Move>& moves, Color color, const BitboardB
 	moves.clear();
 	int c = IsWhite(color) ? 0 : 1;
 
+	// Squares a piece of type t would give check from
+	Bitboard checkSquares[6] = {};
+	// Our pieces standing between a slider and enemy king
+	Bitboard discoverers = 0;
+	bool useCheckSquares = false;
+	// For qsearch work out which squares give check instead of asking GivesCheck
+	if (onlyNoisy && !onlyCaptures)
+	{
+		int them = 1 - c;
+		int kingSq = FirstLSBIndex(board.pieceBitboards[them][(int)Pieces::KING - 1]);
+		if (kingSq >= 0)
+		{
+			useCheckSquares = true;
+			Bitboard occ = board.occupied;
+			Bitboard diagonalFromKing = BishopAttacks(kingSq, occ);
+			Bitboard straightFromKing = RookAttacks(kingSq, occ);
+
+			checkSquares[(int)Pieces::PAWN - 1] = pawnAttacks[them][kingSq];
+			checkSquares[(int)Pieces::KNIGHT - 1] = knightAttacks[kingSq];
+			checkSquares[(int)Pieces::BISHOP - 1] = diagonalFromKing;
+			checkSquares[(int)Pieces::ROOK - 1] = straightFromKing;
+			checkSquares[(int)Pieces::QUEEN - 1] = diagonalFromKing | straightFromKing;
+			// King never gives direct check
+
+			Bitboard ourDiagonal = board.pieceBitboards[c][(int)Pieces::BISHOP - 1] |
+				board.pieceBitboards[c][(int)Pieces::QUEEN - 1];
+			Bitboard ourStraight = board.pieceBitboards[c][(int)Pieces::ROOK - 1] |
+				board.pieceBitboards[c][(int)Pieces::QUEEN - 1];
+
+			// Take away a piece inbetween our piece and the king. If LOS, its a discoverer
+			Bitboard firstInLine = diagonalFromKing & board.allPieces[c];
+			while (firstInLine)
+			{
+				int b = PopLSB(firstInLine);
+				Bitboard bit = 1ULL << b;
+				if (BishopAttacks(kingSq, occ ^ bit) & ourDiagonal & ~bit)
+					discoverers |= bit;
+			}
+			firstInLine = straightFromKing & board.allPieces[c];
+			while (firstInLine)
+			{
+				int b = PopLSB(firstInLine);
+				Bitboard bit = 1ULL << b;
+				if (RookAttacks(kingSq, occ ^ bit) & ourStraight & ~bit)
+					discoverers |= bit;
+			}
+		}
+	}
+
 	// Iterate pieces by bitboards
 	for (int t = 0; t < 6; ++t)
 	{
@@ -250,7 +299,13 @@ void Movegen::GetAllMoves(std::vector<Move>& moves, Color color, const BitboardB
 						continue;
 
 					// Checks
-					if (engine->GivesCheck(move))
+					bool givesCheck;
+					if (!useCheckSquares || isCastle || (discoverers & (1ULL << sq)))
+						givesCheck = engine->GivesCheck(move); // Full test for castling or discovered check
+					else
+						givesCheck = (checkSquares[t] >> endSq) & 1;
+
+					if (givesCheck)
 						moves.push_back(move);
 				}
 				else

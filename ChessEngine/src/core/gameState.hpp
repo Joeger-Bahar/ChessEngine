@@ -30,6 +30,7 @@ struct BoardState
 	uint8_t toSquare;
 	uint8_t enPassantTarget; // 1-63 for square, 0 = none
 	uint8_t castlingRights : 4; // 1000 = white queenside, 0100 = white kingside, 0010 = black queenside, 0001 = black kingside
+	uint8_t checkStatus : 2;
 	uint8_t halfmoveClock;
 	bool wasEnPassant : 1;
 	bool wasCastling  : 1;
