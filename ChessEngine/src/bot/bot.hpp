@@ -75,6 +75,7 @@ private:
 	std::vector<Move> qMoveLists[MAX_PLY];
 	int moveScores[MAX_PLY][MAX_MOVES];  // Scores for moveLists[ply]
 	int qMoveScores[MAX_PLY][MAX_MOVES]; // Scores for qMoveLists[ply
+	std::vector<Move> probCutLists[MAX_PLY];
 
 	SearchStackEntry searchStack[MAX_PLY + 8];
 	Move previousMoves[MAX_PLY] = {};

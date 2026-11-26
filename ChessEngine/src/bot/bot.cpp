@@ -835,7 +835,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 		if (!ttSaysNo)
 		{
-			std::vector<Move> captures;
+			std::vector<Move>& captures = probCutLists[ply];
 			Movegen::GetAllMoves(captures, movingColor, engine->GetBitboardBoard(), engine, true, true);
 			OrderMoves(captures, ply, true);
 

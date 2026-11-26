@@ -1,12 +1,14 @@
 #pragma once
 
-enum class Color {
+#include <cstdint>
+
+enum class Color : uint8_t {
 	WHITE,
 	BLACK,
 	NONE
 };
 
-enum class Pieces {
+enum class Pieces : uint8_t {
 	NONE,
 	PAWN,
 	KNIGHT,

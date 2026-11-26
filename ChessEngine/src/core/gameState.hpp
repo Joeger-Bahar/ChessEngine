@@ -22,16 +22,16 @@ struct BoardState
 {
 	BoardState();
 	uint64_t zobristKey;
-	uint8_t capturedPiece : 3; // 0-7 (PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NONE)
-	uint8_t movedPiece : 3;
-	uint8_t promotion : 3; // NONE if no promotion
+	uint8_t capturedPiece; // 0-7 (PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NONE)
+	uint8_t movedPiece;
+	uint8_t promotion; // NONE if no promotion
 	uint8_t fromSquare;
 	uint8_t toSquare;
 	uint8_t enPassantTarget; // 1-63 for square, 0 = none
-	uint8_t castlingRights : 4; // 1000 = white queenside, 0100 = white kingside, 0010 = black queenside, 0001 = black kingside
-	uint8_t checkStatus : 2;
+	uint8_t castlingRights; // 1000 = white queenside, 0100 = white kingside, 0010 = black queenside, 0001 = black kingside
+	uint8_t checkStatus;
 	uint8_t halfmoveClock;
-	bool wasEnPassant : 1;
-	bool wasCastling  : 1;
-	bool playerToMove : 1; // true = white, false = black
+	bool wasEnPassant;
+	bool wasCastling;
+	bool playerToMove; // true = white, false = black
 };
