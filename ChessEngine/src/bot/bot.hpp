@@ -15,6 +15,7 @@
 #include "graphics/graphicsEngine.hpp"
 
 #define MAX_PLY 128
+#define MAX_MOVES 256 // Max amount of legal moves is 218
 #define NUM_PIECES 6
 
 struct SearchStackEntry
@@ -55,7 +56,7 @@ private:
 
 	int Search(int depth, int ply, int alpha, int beta);
 	int Qsearch(int alpha, int beta, int ply, int qply = 0);
-	int ScoreMove(const Move move, int ply, bool onlyMVVLVA);
+	void ScoreMoves(const std::vector<Move>& moves, int* scores, int ply, bool onlyMVVLVA, Move ttMove = Move());
 	void OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove = Move());
 
 	// UCI output
@@ -72,6 +73,9 @@ private:
 	std::vector<int16_t> contHistory;
 	std::vector<Move> moveLists[MAX_PLY];
 	std::vector<Move> qMoveLists[MAX_PLY];
+	int moveScores[MAX_PLY][MAX_MOVES];  // Scores for moveLists[ply]
+	int qMoveScores[MAX_PLY][MAX_MOVES]; // Scores for qMoveLists[ply
+
 	SearchStackEntry searchStack[MAX_PLY + 8];
 	Move previousMoves[MAX_PLY] = {};
 	Move killerMoves[MAX_PLY][2];

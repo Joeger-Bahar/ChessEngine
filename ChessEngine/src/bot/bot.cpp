@@ -196,99 +196,122 @@ int PieceValue(Piece piece)
 const int captureBonus = 1000000;
 const int killerBonus = 100000;
 
-int Bot::ScoreMove(const Move move, int ply, bool onlyMVVLVA)
+const int ttMoveScore = 10 * captureBonus; // Above every other score so TT move goes first
+
+void Bot::ScoreMoves(const std::vector<Move>& moves, int* scores, int ply, bool onlyMVVLVA, Move ttMove)
 {
-	Piece moved = engine->GetBoard()[GetStart(move)].GetPiece();
-	Piece captured = engine->GetBoard()[GetEnd(move)].GetPiece();
-	int promotion = GetPromotion(move);
-	int promotionBonus = promotion == (int)Pieces::NONE ? 0 :
-		PieceValue(Piece((Pieces)promotion, moved.GetColor())) - PieceValue(Piece(Pieces::PAWN, moved.GetColor()));
+	// These are the same for every move in this position
+	const Square* board = engine->GetBoard();
+	Color us = GameState::currentPlayer;
+	Move killer1 = killerMoves[ply][0];
+	Move killer2 = killerMoves[ply][1];
 
-	// MVV-LVA: Most Valuable Victim - Least Valuable Attacker
-	if (captured.GetType() != Pieces::NONE)
-	{
-		int capScore = PieceValue(captured) * 16 - PieceValue(moved) + promotionBonus
-			+ captureHistory[PieceIndex(moved)][GetEnd(move)][(int)captured.GetType() - 1] / 8;
-
-		if (onlyMVVLVA || SEE(move, 0)) return captureBonus + capScore;
-		return -captureBonus + capScore;
-	}
-
-
-	if (promotionBonus > 0)
-		return captureBonus - 1 + promotionBonus;
-
-	if (onlyMVVLVA) return 0;
-	if (move == killerMoves[ply][0]) return killerBonus;
-	else if (move == killerMoves[ply][1]) return killerBonus - 100;
-
+	Move counter = Move();
 	if (ply > 0 && !MoveIsNull(previousMoves[ply]))
-	{
-		Move prev = previousMoves[ply];
+		counter = counterMoves[(int)us][GetStart(previousMoves[ply])][GetEnd(previousMoves[ply])];
 
-		int prevFrom = GetStart(prev);
-		int prevTo = GetEnd(prev);
-		Color color = (Color)moved.GetColor();
-
-		if (move == counterMoves[(int)color][prevFrom][prevTo])
-			return killerBonus - 200; // Slightly below killer moves
-	}
-
-	int score = historyHeuristic[(int)moved.GetColor()][(int)moved.GetType() - 1][GetStart(move)][GetEnd(move)];
-
-	// Continuation history: how this move has done as a reply to 1 and 2 plies ago historically
+	// Continuation history rows for the moves 1 and 2 plies ago
 	SearchStackEntry* ss = &searchStack[ply + 4];
-	int current = PieceIndex(moved) * 64 + GetEnd(move);
-	for (int back = 1; back <= 2; ++back)
+	int16_t* cont1 = nullptr;
+	int16_t* cont2 = nullptr;
+	if ((ss - 1)->pieceIndex >= 0)
+		cont1 = &contHistory[((ss - 1)->pieceIndex * 64 + GetEnd((ss - 1)->move)) * 768];
+	if ((ss - 2)->pieceIndex >= 0)
+		cont2 = &contHistory[((ss - 2)->pieceIndex * 64 + GetEnd((ss - 2)->move)) * 768];
+
+	for (size_t i = 0; i < moves.size(); ++i)
 	{
-		SearchStackEntry* prev = ss - back;
-		if (prev->pieceIndex >= 0)
+		Move move = moves[i];
+		if (move == ttMove)
 		{
-			score += contHistory[(prev->pieceIndex * 64 + GetEnd(prev->move)) * 768 + current];
+			scores[i] = ttMoveScore;
+			continue;
 		}
+
+		Piece moved = board[GetStart(move)].GetPiece();
+		Piece captured = board[GetEnd(move)].GetPiece();
+		int promotion = GetPromotion(move);
+		int promotionBonus = promotion == (int)Pieces::NONE ? 0 : PieceValue(Piece((Pieces)promotion, moved.GetColor())) - PieceValue(Piece(Pieces::PAWN, moved.GetColor()));
+
+		// MVV LVA
+		if (captured.GetType() != Pieces::NONE)
+		{
+			int capScore = PieceValue(captured) * 16 - PieceValue(moved) + promotionBonus
+				+ captureHistory[PieceIndex(moved)][GetEnd(move)][(int)captured.GetType() - 1] / 8;
+
+			scores[i] = (onlyMVVLVA || SEE(move, 0)) ? captureBonus + capScore : -captureBonus + capScore;
+			continue;
+		}
+
+		if (promotionBonus > 0) { scores[i] = captureBonus - 1 + promotionBonus; continue; }
+		if (onlyMVVLVA)			{ scores[i] = 0;				 continue; }
+		if (move == killer1)	{ scores[i] = killerBonus;		 continue; }
+		if (move == killer2)	{ scores[i] = killerBonus - 100; continue; }
+		if (move == counter)	{ scores[i] = killerBonus - 200; continue; } // Slightly below killer moves
+
+		int score = historyHeuristic[(int)us][(int)moved.GetType() - 1][GetStart(move)][GetEnd(move)];
+
+		int current = PieceIndex(moved) * 64 + GetEnd(move);
+		if (cont1) score += cont1[current];
+		if (cont2) score += cont2[current];
+		scores[i] = score;
 	}
-	return score;
 }
 
-// Orders moves in-place, best first
+static void PickMove(std::vector<Move>& moves, int* scores, size_t i)
+{
+	if (i >= 2 || moves.empty())
+		return; // After the first two calls the list is sorted
+
+	size_t n = moves.size();
+	if (i == 0)
+	{
+		// Find the best move
+		size_t best = 0;
+		for (size_t j = 1; j < n; ++j)
+			if (scores[j] > scores[best])
+				best = j;
+
+		// Bring it to the front. The moves before it shift back by one, so moves with equal
+		// scores keep their order (the same order sorting the whole list gives)
+		Move bestMove = moves[best];
+		int bestScore = scores[best];
+		for (size_t j = best; j > 0; --j)
+		{
+			moves[j] = moves[j - 1];
+			scores[j] = scores[j - 1];
+		}
+		moves[0] = bestMove;
+		scores[0] = bestScore;
+	}
+	else
+	{
+		// The first move didn't cut off: sort the rest once.
+		// Insertion sort, highest score first, moving each move together with its score
+		for (size_t a = 2; a < n; ++a)
+		{
+			int s = scores[a];
+			Move m = moves[a];
+			size_t j = a;
+			while (j > 1 && scores[j - 1] < s)
+			{
+				scores[j] = scores[j - 1];
+				moves[j] = moves[j - 1];
+				--j;
+			}
+			scores[j] = s;
+			moves[j] = m;
+		}
+	}
+}
+
+// Sorts the whole list, best first. firstMove (if it's in the list) goes to the front
 void Bot::OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove)
 {
-	// Score every move once and keep the scores in a parallel array. Calling ScoreMove inside
-	// the sort comparator re-scored both moves on every comparison (~2 * n * log2(n) calls).
-	const size_t n = moves.size();
-	thread_local std::vector<int> scores; // Reused between calls, so no allocation after warm-up
-	scores.resize(n);
-	for (size_t i = 0; i < n; ++i)
-		scores[i] = ScoreMove(moves[i], ply, onlyMVVLVA);
-
-	// Insertion sort, highest score first, moving each move together with its score.
-	// Move lists are short, where this is faster than std::sort. Equal scores keep their order.
-	for (size_t i = 1; i < n; ++i)
-	{
-		const int s = scores[i];
-		const Move m = moves[i];
-		size_t j = i;
-		while (j > 0 && scores[j - 1] < s)
-		{
-			scores[j] = scores[j - 1];
-			moves[j] = moves[j - 1];
-			--j;
-		}
-		scores[j] = s;
-		moves[j] = m;
-	}
-
-	if (!MoveIsNull(firstMove))
-	{
-		// Insert at front
-		moves.insert(moves.begin(), firstMove);
-
-		// Remove move if it was already in
-		auto it = std::find(moves.begin() + 1, moves.end(), firstMove);
-		if (it != moves.end()) {
-			moves.erase(it);
-		}
-	}
+	int scores[MAX_MOVES];
+	ScoreMoves(moves, scores, ply, onlyMVVLVA, firstMove);
+	PickMove(moves, scores, 0);
+	PickMove(moves, scores, 1);
 }
 
 int& Bot::CaptureHistoryEntry(Move move)
@@ -891,15 +914,8 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	std::vector<Move>& moves = moveLists[ply];
 	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
 
-	OrderMoves(moves, ply, false);
-
-	// If we probed a move from TT, move it to the front
-	if (ttMove)
-	{
-		std::vector<Move>::iterator it = std::find(moves.begin(), moves.end(), (Move)ttMove);
-		if (it != moves.end())
-			std::rotate(moves.begin(), it, it + 1); // TT move first, shift others down
-	}
+	int* scores = moveScores[ply];
+	ScoreMoves(moves, scores, ply, false, ttMove); // Tt move gets top score
 
 	int originalAlpha = alpha;
 	uint32_t bestMove32 = 0;
@@ -923,8 +939,11 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	bool skipQuiets = false;
 
 	// Loop through moves
-	for (const Move& move : moves)
+	for (size_t moveIndex = 0; moveIndex < moves.size(); ++moveIndex)
 	{
+		PickMove(moves, scores, moveIndex);
+		const Move move = moves[moveIndex];
+
 		// Skip excluded move
 		if (move == ss->excludedMove)
 			continue;
@@ -1206,19 +1225,17 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	std::vector<Move>& moves = qMoveLists[ply];
 	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine,
 		!inCheck, !inCheck && qply >= 2);
-	OrderMoves(moves, ply, true);
 
-	if (ttMove)
-	{
-		std::vector<Move>::iterator it = std::find(moves.begin(), moves.end(), (Move)ttMove);
-		if (it != moves.end())
-			std::rotate(moves.begin(), it, it + 1);
-	}
+	int* scores = qMoveScores[ply];
+	ScoreMoves(moves, scores, ply, true, ttMove);
 
 	bool foundLegal = false;
 
-	for (const Move& move : moves)
+	for (size_t moveIndex = 0; moveIndex < moves.size(); ++moveIndex)
 	{
+		PickMove(moves, scores, moveIndex);
+		const Move move = moves[moveIndex];
+
 		// Losing exchange
 		if (!inCheck && !SEE(move, 0))
 			continue;
