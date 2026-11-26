@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <vector>
+#include <atomic>
+#include <functional>
 
 #include "opening.hpp"
 
@@ -38,6 +40,15 @@ public:
 	void Clear();
 	inline void SetHashSize(int megabytes) { tt.Resize(megabytes); }
 	inline void SetThreadCount(int threads) { this->threads = threads; }
+
+	// Lazy SMP. Helper threads run this same search on their own board, sharing the TT.
+	void SetEngine(Engine* newEngine) { engine = newEngine; }
+	void MakeHelper(int index) { isHelper = true; helperIndex = index; }
+	void HelperSearch(); // Searches until the main thread calls StopHelpers()
+	// Called by the main thread once it needs to actually search to start helpers
+	void SetSearchStartCallback(std::function<void()> callback) { onSearchStart = std::move(callback); }
+	static void ResetHelperState(); // Before helpers start: clears the stop flag and node count
+	static void StopHelpers();      // Tells the helper threads to finish
 
 private:
 	bool SEE(Move move, int threshold);
@@ -79,4 +90,9 @@ private:
 	int softTime = -1;
 	int threads = 1;
 	bool quitEarly = false;
+
+	// Lazy SMP
+	bool isHelper = false;
+	int helperIndex = 0;
+	std::function<void()> onSearchStart;
 };

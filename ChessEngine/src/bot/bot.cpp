@@ -143,6 +143,21 @@ bool Bot::SEE(Move move, int threshold)
 
 static Tablebase tb("res/syzygy/");
 
+// Shared by search threads
+static std::atomic<bool> helpersStop{ false }; // Set to true when search is done
+static std::atomic<long long> helperNodes{ 0 }; // Nodes searched by helpers, for info
+
+void Bot::ResetHelperState()
+{
+	helpersStop.store(false);
+	helperNodes.store(0);
+}
+
+void Bot::StopHelpers()
+{
+	helpersStop.store(true);
+}
+
 Bot::Bot(Engine* engine, Color color)
 {
 	this->engine = engine;
@@ -315,7 +330,8 @@ void Bot::Clear()
 void Bot::PrintInfo(int depth, int score, Move rootMove)
 {
 	long long ms = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
-	long long nps = (long long)nodesSearched * 1000 / std::max(ms, 1LL);
+	long long nodes = nodesSearched + helperNodes.load(std::memory_order_relaxed); // Every thread
+	long long nps = nodes * 1000 / std::max(ms, 1LL);
 
 	std::cout << "info depth " << depth;
 	if (std::abs(score) >= MATE_VAL - MAX_PLY)
@@ -327,7 +343,7 @@ void Bot::PrintInfo(int depth, int score, Move rootMove)
 	else
 		std::cout << " score cp " << score;
 
-	std::cout << " nodes " << nodesSearched << " nps " << nps << " time " << ms
+	std::cout << " nodes " << nodes << " nps " << nps << " time " << ms
 		<< " pv " << GetPV(rootMove, depth) << std::endl; // endl flushes, so the GUI sees it right away
 }
 
@@ -379,9 +395,18 @@ Move Bot::GetMoveUCI(int timeForMove, int softTime)
 	return move;
 }
 
+void Bot::HelperSearch()
+{
+	// No clock, the main thread decides when to stop
+	timePerTurn = -1;
+	softTime = -1;
+	GetMove();
+}
+
 Move Bot::GetMove()
 {
-	Move bookMove = GetBookMove(engine, "res/openings.bin");
+	// Only main thread uses opening book, root tb probe, the single-legal-move shortcut
+	Move bookMove = isHelper ? Move() : GetBookMove(engine, "res/openings.bin");
 	if (!MoveIsNull(bookMove))
 	{
 		std::cout << "info string Using opening move" << std::endl;
@@ -391,7 +416,10 @@ Move Bot::GetMove()
 	quitEarly = false;
 	memset(previousMoves, 0, sizeof(previousMoves));
 	startTime = steady_clock::now();
-	tt.NewSearch(); // age TT entries for this root search
+
+	// Only main ages it for everyone
+	if (!isHelper)
+		tt.NewSearch(); // age TT entries for this root search
 
 	// Clear killer moves before each search
 	memset(killerMoves, 0, sizeof(killerMoves));
@@ -418,7 +446,7 @@ Move Bot::GetMove()
 	Move previousBestMove = Move();
 	int previousScore = -INF;
 
-	if (tb.Probeable(engine->GetBitboardBoard()))
+	if (!isHelper && tb.Probeable(engine->GetBitboardBoard()))
 	{
 		Move tbMove = tb.GetMove(engine);
 		if (!MoveIsNull(tbMove))
@@ -447,7 +475,10 @@ Move Bot::GetMove()
 		}
 	}
 
-	for (int depth = 1; depth <= maxDepth; ++depth)
+	if (onSearchStart)
+		onSearchStart();
+
+	for (int depth = isHelper ? 1 + helperIndex % 2 : 1; depth <= maxDepth; ++depth)
 	{
 		rootDepth = depth;
 		bool foundLegal = false;
@@ -580,7 +611,7 @@ Move Bot::GetMove()
 		}
 
 		// Report the finished iteration (an unfinished one has already left the loop)
-		if (foundLegal)
+		if (foundLegal && !isHelper)
 			PrintInfo(depth, bestScore, bestMove);
 
 		// Extradite mate for bot
@@ -591,7 +622,7 @@ Move Bot::GetMove()
 		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
 		// Keep searching until limit
 		if (depth == maxDepth)
-			if (elapsed < timePerTurn)
+			if (isHelper ? maxDepth < MAX_PLY - 2 : elapsed < timePerTurn)
 				++maxDepth;
 
 		// Stop searching if time limit is reached
@@ -617,6 +648,12 @@ Move Bot::GetMove()
 			break;
 	}
 
+	if (isHelper)
+	{
+		nodesSearched = 0;
+		return bestMove; // Only the main thread plays a move
+	}
+
 	std::cout << "info string Making " << MoveToUCI(bestMove) << " with score " << bestScore << std::endl;
 	nodesSearched = 0;
 
@@ -638,6 +675,16 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// Check time every 512 nodes (& faster than %)
 	if ((nodesSearched & 511) == 0)
 	{
+		if (isHelper)
+		{
+			// Helpers don't use the clock
+			helperNodes.fetch_add(512, std::memory_order_relaxed);
+			if (helpersStop.load(std::memory_order_relaxed))
+			{
+				quitEarly = true;
+				return alpha;
+			}
+		}
 		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
 		if (timePerTurn >= 0 && elapsed >= timePerTurn) // Negative = no limit ("go infinite")
 		{
@@ -1099,6 +1146,15 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 	++nodesSearched;
 	if ((nodesSearched & 511) == 0) // Check time every 512 nodes
 	{
+		if (isHelper)
+		{
+			helperNodes.fetch_add(512, std::memory_order_relaxed);
+			if (helpersStop.load(std::memory_order_relaxed))
+			{
+				quitEarly = true;
+				return alpha;
+			}
+		}
 		auto elapsed = duration_cast<milliseconds>(steady_clock::now() - startTime).count();
 		if (timePerTurn >= 0 && elapsed >= timePerTurn)
 		{

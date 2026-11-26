@@ -64,17 +64,21 @@ void Uci::HandleCommand(const std::string& line)
         delete bot;
         bot = new Bot(engine, Color::WHITE);
         bot->SetHashSize(hashMB);
+        helperBots.clear(); // New game, new history for bots
     }
     else if (token == "quit") exit(0);
 }
 
 void Uci::HandlePosition(std::istringstream& iss)
 {
-    std::string line;
-    std::getline(iss, line);
+    std::getline(iss, positionLine);
+    SetPosition(engine, positionLine);
+}
     
+void Uci::SetPosition(Engine* engine, const std::string& positionLine)
+{
     std::string token;
-    std::istringstream lineSS(line);
+    std::istringstream lineSS(positionLine);
     lineSS >> token;
 
     if (token == "startpos")
@@ -101,7 +105,7 @@ void Uci::HandlePosition(std::istringstream& iss)
         std::string moveString;
         while (lineSS >> moveString)
         {
-            Move move = ParseMove(moveString);
+            Move move = ParseMove(engine, moveString);
             engine->MakeMove(move);
         }
     }
@@ -182,7 +186,9 @@ void Uci::HandleGo(std::istringstream& iss)
     }
 
     bot->SetColor(us);
+    bot->SetSearchStartCallback([this, us]() { StartHelpers(us); });
     Move bestMove = bot->GetMoveUCI(timeForMove, softTime);
+    StopHelpers();
 
     std::cout << "bestmove " << MoveToUCI(bestMove) << std::endl;
     std::cout.flush();
@@ -208,12 +214,15 @@ void Uci::HandleSetOption(std::istringstream& is)
     if (name == "Threads" && !value.empty())
     {
         threads = std::stoi(value);
+        if (threads < 1) threads = 1;
         bot->SetThreadCount(threads);
+        helperBots.clear(); // Main again at next search
     }
 }
 
 
-Move Uci::ParseMove(const std::string& moveString)
+
+Move Uci::ParseMove(Engine* engine, const std::string& moveString)
 {
     int startCol = moveString[0] - 'a';
     int startRow = '8' - moveString[1];
@@ -262,4 +271,44 @@ Move Uci::ParseMove(const std::string& moveString)
     }
 
     return EncodeMove(startSquare, endSquare, promotion, isEnPassant, isCastle);
+}
+
+// Lazy SMP
+// All threads share the same TT and search the same position, so what one finds
+// they all can use
+// Only main thread's move is played
+void Uci::StartHelpers(Color us)
+{
+    if (threads <= 1)
+        return;
+
+    while ((int)helperBots.size() < threads - 1)
+    {
+        helperBots.push_back(std::make_unique<Bot>(engine, us)); // Get's its own engine
+        helperBots.back()->MakeHelper((int)helperBots.size());
+    }
+
+    Bot::ResetHelperState();
+    for (int i = 0; i < threads - 1; ++i)
+    {
+        Bot* helper = helperBots[i].get();
+        helperThreads.emplace_back([this, helper, us]()
+        {
+            auto helperEngine = std::make_unique<Engine>();
+            SetPosition(helperEngine.get(), positionLine);
+
+            helper->SetEngine(helperEngine.get());
+            helper->SetColor(us);
+            helper->HelperSearch();
+            helper->SetEngine(nullptr);
+        });
+    }
+}
+
+void Uci::StopHelpers()
+{
+    Bot::StopHelpers();
+    for (std::thread& t : helperThreads)
+        t.join();
+    helperThreads.clear();
 }

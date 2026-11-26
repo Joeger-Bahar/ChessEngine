@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <cctype>
+#include <mutex>
 
 #include "bot/bot.hpp"
 #include "movegen.hpp"
