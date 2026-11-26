@@ -30,9 +30,9 @@ private:
 
 	std::vector<std::function<void()>> queuedRenders;
 
-	SDL_Texture* pieceTextures[12];
-	SDL_Window* window;
-	SDL_Renderer* renderer;
+	SDL_Texture* pieceTextures[12] = {};
+	SDL_Window* window = nullptr;
+	SDL_Renderer* renderer = nullptr;
 };
 
 template<typename F>

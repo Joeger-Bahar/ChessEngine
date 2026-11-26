@@ -15,7 +15,8 @@ GraphicsEngine::GraphicsEngine()
 
 GraphicsEngine::~GraphicsEngine()
 {
-	Shutdown();
+	if (window)
+		Shutdown();
 }
 
 void GraphicsEngine::Render(const Square board[64])

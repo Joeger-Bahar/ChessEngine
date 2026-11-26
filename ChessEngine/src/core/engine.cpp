@@ -41,8 +41,11 @@ Engine::~Engine() {}
 
 void Engine::Init(std::string fen)
 {
-	Movegen::InitPrecomputedAttacks(); // Before LoadPosition, which uses the attack tables to detect check
-	LoadPosition(fen);                 // Also resets the undo and repetition history
+	// Tables are shared by every thread, so only build them once
+	static std::once_flag attackTablesBuilt;
+	std::call_once(attackTablesBuilt, Movegen::InitPrecomputedAttacks);
+
+	LoadPosition(fen); // Also resets the undo and repetition history
 }
 
 void Engine::Reset()

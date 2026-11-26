@@ -4,19 +4,18 @@
 
 #include <cstdint>
 
-// TODO: Can make enPassant target only record col + 1 bit for whether there was one (use last player for row)
 namespace GameState
 {
 	inline bool uci = false;
-	inline Color currentPlayer = Color::WHITE;
-	inline int   checkStatus = 0;							 // 10 - white, 01 - black
-	inline int   enPassantTarget = 0;						 // Index of ep square, 0 if no target
-	inline int   halfmoves = 0;								 // Number of halfmoves since last capture or pawn move (for 50-move rule)
-	inline bool	 endgame = false;						 // If the game can be considered endgame
-	inline bool  checkmate = false, draw = false;			 // Can use check status for color
-	inline bool  invalidMove = false;						 // If the last move was invalid
-	inline bool  whiteCastlingRights[2] = { true, true };	 // { queenside, kingside }
-	inline bool  blackCastlingRights[2] = { true, true };
+	inline thread_local Color currentPlayer = Color::WHITE;
+	inline thread_local int   checkStatus = 0;							 // 10 - white, 01 - black
+	inline thread_local int   enPassantTarget = 0;						 // Index of ep square, 0 if no target
+	inline thread_local int   halfmoves = 0;							 // Number of halfmoves since last capture or pawn move (for 50-move rule)
+	inline thread_local bool  endgame = false;						     // If the game can be considered endgame
+	inline thread_local bool  checkmate = false, draw = false;			 // Can use check status for color
+	inline thread_local bool  invalidMove = false;						 // If the last move was invalid
+	inline thread_local bool  whiteCastlingRights[2] = { true, true };	 // { queenside, kingside }
+	inline thread_local bool  blackCastlingRights[2] = { true, true };
 };
 
 struct BoardState

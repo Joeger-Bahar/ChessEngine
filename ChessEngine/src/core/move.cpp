@@ -6,7 +6,8 @@
 
 const char* MoveToUCI(Move m)
 {
-	static char buffer[6]; // Max: e2e4q + null
+	// Once per thread so threads can't overwrite each others
+	static thread_local char buffer[6]; // Max: e2e4q + null
 
 	int start = GetStart(m);
 	int end = GetEnd(m);
