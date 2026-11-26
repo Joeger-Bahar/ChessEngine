@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <iostream>
+#include <immintrin.h>
 
 #include "constants.hpp"
 
@@ -69,6 +70,14 @@ Bitboard rookAttacks[64][4096];   // 4096 = 2^12, max rook relevant occupancy bi
 Bitboard bishopAttacks[64][512];  // 512 = 2^9, max bishop relevant occupancy bits
 Bitboard rookMasks[64];
 Bitboard bishopMasks[64];
+
+// PEXT (BMI2) attack tables. _pext_u64 packs the relevant occupancy bits straight into an
+// index, so there's no magic multiply, and the tables are dense: ~840 KB instead of ~2.3 MB,
+// which fits far better in cache. Needs a CPU with BMI2 (Intel since 2013, AMD Zen 3+).
+static Bitboard rookPextAttacks[102400];
+static Bitboard bishopPextAttacks[5248];
+static uint32_t rookPextOffset[64];
+static uint32_t bishopPextOffset[64];
 
 bool Movegen::IsSquareAttacked(int sq, Color byColor, const BitboardBoard& board)
 {
@@ -340,14 +349,23 @@ Bitboard Movegen::GetPseudoAttacks(Pieces piece, int sq, const Bitboard& allOcc,
 	return moves;
 }
 
+//Bitboard Movegen::RookAttacks(int sq, Bitboard occ)
+//{
+//	return rookAttacks[sq][((occ & rookMasks[sq]) * rookMagics[sq]) >> rookShifts[sq]];
+//}
+//
+//Bitboard Movegen::BishopAttacks(int sq, Bitboard occ)
+//{
+//	return bishopAttacks[sq][((occ & bishopMasks[sq]) * bishopMagics[sq]) >> bishopShifts[sq]];
+//}
 Bitboard Movegen::RookAttacks(int sq, Bitboard occ)
 {
-	return rookAttacks[sq][((occ & rookMasks[sq]) * rookMagics[sq]) >> rookShifts[sq]];
+	return rookPextAttacks[rookPextOffset[sq] + _pext_u64(occ, rookMasks[sq])];
 }
 
 Bitboard Movegen::BishopAttacks(int sq, Bitboard occ)
 {
-	return bishopAttacks[sq][((occ & bishopMasks[sq]) * bishopMagics[sq]) >> bishopShifts[sq]];
+	return bishopPextAttacks[bishopPextOffset[sq] + _pext_u64(occ, bishopMasks[sq])];
 }
 
 const Bitboard(&Movegen::GetPawnAttacks())[2][64]
@@ -652,5 +670,29 @@ void Movegen::BuildMagicAttackTables()
 			if (bits == 0)
 				bishopAttacks[sq][0] = ComputeBishopAttacks(sq, 0ULL);
 		}
+	}
+
+	// PEXT tables: walk every subset of each mask (carry-rippler) and store its attacks
+	uint32_t rookOffset = 0;
+	uint32_t bishopOffset = 0;
+	for (int sq = 0; sq < 64; ++sq)
+	{
+		rookPextOffset[sq] = rookOffset;
+		Bitboard occ = 0;
+		do
+		{
+			rookPextAttacks[rookOffset + _pext_u64(occ, rookMasks[sq])] = ComputeRookAttacks(sq, occ);
+			occ = (occ - rookMasks[sq]) & rookMasks[sq];
+		} while (occ);
+		rookOffset += 1u << PopCount64(rookMasks[sq]);
+
+		bishopPextOffset[sq] = bishopOffset;
+		occ = 0;
+		do
+		{
+			bishopPextAttacks[bishopOffset + _pext_u64(occ, bishopMasks[sq])] = ComputeBishopAttacks(sq, occ);
+			occ = (occ - bishopMasks[sq]) & bishopMasks[sq];
+		} while (occ);
+		bishopOffset += 1u << PopCount64(bishopMasks[sq]);
 	}
 }
