@@ -833,13 +833,11 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			// Double extension, nothing comes near, so the TT move is forced
 			if (!pvNode && score < singularBeta - 20 && (ss - 1)->doubleExtensions < 6)
 				singularExtension = 2;
-			else if (singularBeta >= beta)
-				return singularBeta; // Multicut
-			else if (ScoreFromTT(ttEntry.score, ply) >= beta)
-				singularExtension = -1; // Negative extension, search shallower
 		}
 		else if (singularBeta >= beta)
-			return singularBeta; // Multicut. Without TT move, anothre move beats beta
+			return singularBeta; // Multicut
+		else if (ScoreFromTT(ttEntry.score, ply) >= beta)
+			singularExtension = -1; // Negative extension, search shallower
 	}
 
 	// Pseudo legal

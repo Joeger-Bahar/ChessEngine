@@ -1,8 +1,53 @@
 #include "TT.hpp"
 
+// Unnamed namespace as only this file uses them
+namespace
+{
+    constexpr std::memory_order RELAXED = std::memory_order_relaxed;
+
+    uint64_t PackData1(int score, int eval)
+    {
+        return (uint64_t)(uint32_t)score | ((uint64_t)(uint32_t)eval << 32);
+    }
+
+    uint64_t PackData2(uint32_t move32, int depth, uint8_t flag, uint8_t age)
+    {
+        return (uint64_t)move32
+            | ((uint64_t)(uint16_t)(int16_t)depth << 32)
+            | ((uint64_t)flag << 48)
+            | ((uint64_t)age << 56);
+    }
+
+    // Unpacks a slot into out. out.key is the key it holds: 0 if it's empty, and some
+    // other position's key if another thread was writing it at the same time.
+    void ReadSlot(const TTSlot& slot, TTEntry& out)
+    {
+        uint64_t check = slot.check.load(RELAXED);
+        uint64_t d1 = slot.data1.load(RELAXED);
+        uint64_t d2 = slot.data2.load(RELAXED);
+
+        out.key = check ^ d1 ^ d2;
+        out.score = (int32_t)(uint32_t)d1;
+        out.eval = (int32_t)(uint32_t)(d1 >> 32);
+        out.move32 = (uint32_t)d2;
+        out.depth = (int16_t)(uint16_t)(d2 >> 32);
+        out.flag = (uint8_t)(d2 >> 48);
+        out.age = (uint8_t)(d2 >> 56);
+    }
+
+    void WriteSlot(TTSlot& slot, uint64_t key, uint64_t d1, uint64_t d2)
+    {
+        slot.data1.store(d1, RELAXED);
+        slot.data2.store(d2, RELAXED);
+        slot.check.store(key ^ d1 ^ d2, RELAXED);
+    }
+}
+
 void TranspositionTable::Clear()
 {
-    for (auto& e : table) e.key = 0;
+    for (size_t i = 0; i < buckets; ++i)
+        for (TTSlot& slot : table[i].slot)
+            WriteSlot(slot, 0, 0, 0);
 }
 
 void TranspositionTable::Resize(int megabytes)
@@ -10,16 +55,17 @@ void TranspositionTable::Resize(int megabytes)
     // Largest power of two that fits
     size_t bytes = (size_t)megabytes * 1024 * 1024;
     size_t count = 1;
-    while (count * 2 * sizeof(TTEntry) <= bytes)
+    while (count * 2 * sizeof(TTBucket) <= bytes)
         count *= 2;
 
-    if (count == entries && table.size() == count)
+    if (count == buckets && table)
     {
         Clear();
         return;
     }
-    entries = count;
-    table.assign(entries, TTEntry{});
+    table.reset(); // Free the old table
+    table.reset(new TTBucket[count]); // Starts zeroed
+    buckets = count;
 }
 
 void TranspositionTable::NewSearch()
@@ -30,11 +76,22 @@ void TranspositionTable::NewSearch()
 
 Move TranspositionTable::GetBestMove(uint64_t key) const
 {
-    size_t idx = IndexFor(key);
-    const TTEntry& e = table[idx];
-    if (e.key == key && e.move32 != 0)
-        return static_cast<Move>(e.move32);
+    TTEntry e;
+    if (Find(key, e) && e.move32 != 0)
+        return (Move)e.move32;
     return Move(); // null move if none
+}
+
+bool TranspositionTable::Find(uint64_t key, TTEntry& out) const
+{
+    TTBucket& bucket = table[key & (buckets - 1)];
+    for (const TTSlot& slot : bucket.slot)
+    {
+        ReadSlot(slot, out);
+        if (out.key == key)
+            return true;
+    }
+    return false;
 }
 
 TranspositionTable::TranspositionTable(int megabytes)
@@ -44,77 +101,72 @@ TranspositionTable::TranspositionTable(int megabytes)
 
 bool TranspositionTable::ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove, int* outEval)
 {
-    size_t idx = IndexFor(key);
-    TTEntry& e = table[idx];
-    if (e.key == key)
+    TTEntry e;
+    if (!Find(key, e))
+        return false;
+
+    outMove = e.move32;
+    if (outEval) *outEval = e.eval;
+
+    if (e.depth >= depth)
     {
-        outMove = e.move32;
-        if (outEval) *outEval = e.eval;
-        if (e.depth >= depth)
+        if (e.flag == TT_EXACT
+            || (e.flag == TT_ALPHA && e.score <= alpha)
+            || (e.flag == TT_BETA && e.score >= beta))
         {
-            if (e.flag == TT_EXACT)
-            {
-                outScore = e.score;
-                return true;
-            }
-            else if (e.flag == TT_ALPHA && e.score <= alpha)
-            {
-                outScore = e.score;
-                return true;
-            }
-            else if (e.flag == TT_BETA && e.score >= beta)
-            {
-                outScore = e.score;
-                return true;
-            }
+            outScore = e.score;
+            return true;
         }
     }
+
     return false;
 }
 
 // store an entry
 void TranspositionTable::ttStore(uint64_t key, int depth, int score, uint32_t move32, uint8_t flag, int eval)
 {
-    size_t idx = IndexFor(key);
-    TTEntry& e = table[idx];
+    TTBucket& bucket = table[key & (buckets - 1)];
+    TTEntry e[2];
+    ReadSlot(bucket.slot[0], e[0]);
+    ReadSlot(bucket.slot[1], e[1]);
 
-    // replacement scheme: keep deeper searches and/or newer ages
-    bool replace = false;
-    if (e.key == 0) replace = true; // empty
-    else if (e.key == key) replace = true; // update same key
-    else if (depth > e.depth) replace = true; // deeper preferred
-    else if (e.age != currentAge) replace = true; // newer age
-    // you can refine: always replace if depth >= e.depth-2 etc
-
-    if (replace)
+    // Which slot to use? The one alr holding this position or the less valuable one
+    // New result always gets stored
+    int target;
+    if (e[0].key == key)
+        target = 0;
+    else if (e[1].key == key)
+        target = 1;
+    else
     {
-        // A fail-low search has no best move: keep the one already stored for this position
-        if (move32 == 0 && e.key == key)
-            move32 = e.move32;
+        auto worth = [&](const TTEntry& x)
+            {
+                if (x.key == 0) return -1000;
 
-        if (eval == TT_NO_EVAL && e.key == key)
-            eval = e.eval;
-
-        e.key = key;
-        e.depth = depth;
-        e.score = score;
-        e.move32 = move32;
-        e.flag = flag;
-        e.age = currentAge;
-        e.eval = eval;
-
+                return x.depth - (x.age != currentAge ? 100 : 0);
+            };
+        target = worth(e[0]) <= worth(e[1]) ? 0 : 1;
     }
+
+    if (e[target].key == key)
+    {
+        // Same position so keep the stored move and eval
+        if (move32 == 0)
+            move32 = e[target].move32;
+        if (eval == TT_NO_EVAL)
+            eval = e[target].eval;
+    }
+
+    WriteSlot(bucket.slot[target], key, PackData1(score, eval), PackData2(move32, depth, flag, currentAge));
 }
 
 bool TranspositionTable::ttLookup(uint64_t key, TTEntry& out) const
 {
-    const TTEntry& e = table[IndexFor(key)];
-    if (e.key != key) return false;
-    out = e;
-    return true;
+    return Find(key, out);
 }
 
-inline size_t TranspositionTable::IndexFor(uint64_t key) const
+TranspositionTable& SharedTT()
 {
-    return (size_t)(key & (entries - 1));
+    static TranspositionTable table(128);
+    return table;
 }

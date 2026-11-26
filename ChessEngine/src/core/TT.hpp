@@ -1,8 +1,9 @@
 #pragma once
 
-#include <vector>
 #include <cstdint>
 #include <xmmintrin.h>
+#include <atomic>
+#include <memory>
 
 #include "move.hpp"
 
@@ -21,12 +22,26 @@ struct TTEntry
     uint8_t age;      // for simple replacement scheme
 };
 
+// One entry as 3 64 bit words.
+// Check holds key ^ data1 ^ data2, so if there is a race condition, the words
+// don't fit together and the key test fails. Returns a miss instead of garbage data
+// Lockles hasing. ReLaxed atomics compile to plain loads and stores on x64
+struct TTSlot
+{
+    std::atomic<uint64_t> check{ 0 };
+    std::atomic<uint64_t> data1{ 0 }; // Score (low 32 bits) | static eval (high 32 bits)
+    std::atomic<uint64_t> data2{ 0 }; // move (32) | depth (16) | flag (8) | age (8)
+};
+
+// Two entries per index. alignas(64) puts each bucket in a 64 bytes cache line
+// so both entries costs a single memory load
+struct alignas(64) TTBucket
+{
+    TTSlot slot[2];
+};
+
 struct TranspositionTable
 {
-    std::vector<TTEntry> table;
-    size_t entries; // number of entries (power of two)
-    uint8_t currentAge = 0;
-
     TranspositionTable(int megabytes = 128);
 
     bool ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove, int* outEval = nullptr);
@@ -35,9 +50,8 @@ struct TranspositionTable
     // Copies out the entry for key, false is there isn't one
     bool ttLookup(uint64_t key, TTEntry& out) const;
 
-    inline size_t IndexFor(uint64_t key) const;
-
-    void Prefetch(uint64_t key) const { _mm_prefetch((const char*)&table[(size_t)(key & (entries - 1))], _MM_HINT_T0); }
+    // Start loading this positions bucket into the cache now
+    void Prefetch(uint64_t key) const { _mm_prefetch((const char*)&table[key & (buckets - 1)], _MM_HINT_T0); }
 
     void Clear();
 
@@ -46,4 +60,15 @@ struct TranspositionTable
     void NewSearch();
 
     Move GetBestMove(uint64_t key) const;
+
+private:
+    // The bucket holding this position
+    bool Find(uint64_t key, TTEntry& out) const;
+
+    std::unique_ptr<TTBucket[]> table;
+    size_t buckets = 0; // Number of buckets. Is a power of 2
+    uint8_t currentAge = 0;
 };
+
+// Singleton table for all the threads
+TranspositionTable& SharedTT();

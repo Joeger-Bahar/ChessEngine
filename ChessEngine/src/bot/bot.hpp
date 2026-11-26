@@ -51,7 +51,7 @@ private:
 	void PrintInfo(int depth, int score, Move rootMove);
 	std::string GetPV(Move rootMove, int maxLength);
 
-	TranspositionTable tt;
+	TranspositionTable& tt = SharedTT(); // Singleton table
 	// [color][pieces][start square][end square]
 	int historyHeuristic[2][NUM_PIECES][64][64] = { 0 };
 	Engine* engine;
