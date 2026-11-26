@@ -38,6 +38,8 @@ struct TranspositionTable
 
     void Clear();
 
+    void Resize(int megabytes); // Reallocates and clears the table
+
     void NewSearch();
 
     Move GetBestMove(uint64_t key) const;

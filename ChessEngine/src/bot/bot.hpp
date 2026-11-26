@@ -35,6 +35,8 @@ public:
 	const Color GetColor() const { return botColor; }
 
 	void Clear();
+	inline void SetHashSize(int megabytes) { tt.Resize(megabytes); }
+	inline void SetThreadCount(int threads) { this->threads = threads; }
 
 private:
 	bool SEE(Move move, int threshold);
@@ -74,5 +76,6 @@ private:
 	int rootDepth = 0;
 	int timePerTurn = 12000; // In milliseconds
 	int softTime = -1;
+	int threads = 1;
 	bool quitEarly = false;
 };

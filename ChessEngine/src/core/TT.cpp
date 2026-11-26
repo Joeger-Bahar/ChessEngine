@@ -5,6 +5,23 @@ void TranspositionTable::Clear()
     for (auto& e : table) e.key = 0;
 }
 
+void TranspositionTable::Resize(int megabytes)
+{
+    // Largest power of two that fits
+    size_t bytes = (size_t)megabytes * 1024 * 1024;
+    size_t count = 1;
+    while (count * 2 * sizeof(TTEntry) <= bytes)
+        count *= 2;
+
+    if (count == entries && table.size() == count)
+    {
+        Clear();
+        return;
+    }
+    entries = count;
+    table.assign(entries, TTEntry{});
+}
+
 void TranspositionTable::NewSearch()
 {
     // increment age at each root search
@@ -22,18 +39,7 @@ Move TranspositionTable::GetBestMove(uint64_t key) const
 
 TranspositionTable::TranspositionTable(int megabytes)
 {
-    size_t bytes = megabytes * 1024ull * 1024ull;
-    entries = bytes / sizeof(TTEntry);
-    unsigned long index;
-    // round down to power of 2 for fast masking     what the fuck
-    if (_BitScanReverse64(&index, entries))
-    {
-        size_t p2 = 1ull << index;
-        entries = p2;
-    }
-    table.resize(entries);
-    
-    Clear();
+    Resize(megabytes);
 }
 
 bool TranspositionTable::ttProbe(uint64_t key, int depth, int alpha, int beta, int& outScore, uint32_t& outMove, int* outEval)

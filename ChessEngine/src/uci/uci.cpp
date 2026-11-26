@@ -34,10 +34,13 @@ void Uci::HandleCommand(const std::string& line)
     {
         std::cout << "id name ChessEngine" << std::endl;
         std::cout << "id author Joeger" << std::endl;
+        std::cout << "option name Hash type spin default 128 min 1 max 4096" << std::endl;
+        std::cout << "option name Threads type spin default 1 min 1 max 1024" << std::endl;
         std::cout << "uciok" << std::endl;
     }
     else if (token == "isready")  std::cout << "readyok" << std::endl;
     else if (token == "position") HandlePosition(iss);
+    else if (token == "setoption") HandleSetOption(iss);
     else if (token == "go")       HandleGo(iss);
     else if (token == "ucinewgame")
     {
@@ -60,6 +63,7 @@ void Uci::HandleCommand(const std::string& line)
 
         delete bot;
         bot = new Bot(engine, Color::WHITE);
+        bot->SetHashSize(hashMB);
     }
     else if (token == "quit") exit(0);
 }
@@ -103,24 +107,6 @@ void Uci::HandlePosition(std::istringstream& iss)
     }
 }
 
-//void Uci::HandleGo(std::istringstream& iss)
-//{
-//    int wtime = 300000; // Default 5 minutes
-//    int btime = 300000;
-//
-//    std::string token;
-//    while (iss >> token)
-//    {
-//        if (token == "wtime")      iss >> wtime;
-//        else if (token == "btime") iss >> btime;
-//    }
-//
-//    bot->SetColor(engine->GetCurrentPlayer());
-//    Move bestMove = bot->GetMoveUCI(wtime, btime);
-//
-//    std::cout << "bestmove " << MoveToUCI(bestMove) << std::endl;
-//    std::cout.flush();
-//}
 void Uci::HandleGo(std::istringstream& iss)
 {
     int wtime = -1, btime = -1;        // Remaining time in ms
@@ -200,6 +186,30 @@ void Uci::HandleGo(std::istringstream& iss)
 
     std::cout << "bestmove " << MoveToUCI(bestMove) << std::endl;
     std::cout.flush();
+}
+
+void Uci::HandleSetOption(std::istringstream& is)
+{
+    std::string word, name, value;
+    is >> word; // "name";
+    while (is >> word && word != "value")
+        name += (name.empty() ? "" : " ") + word;
+    is >> value;
+
+    if (name == "Hash" && !value.empty())
+    {
+        int mb = std::stoi(value);
+        if (mb < 1) mb = 1;
+        if (mb > 4096) mb = 4096;
+        hashMB = mb;
+        bot->SetHashSize(hashMB);
+    }
+
+    if (name == "Threads" && !value.empty())
+    {
+        threads = std::stoi(value);
+        bot->SetThreadCount(threads);
+    }
 }
 
 
