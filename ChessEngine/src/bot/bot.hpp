@@ -23,6 +23,7 @@ struct SearchStackEntry
 	int staticEval = 0;
 	bool inCheck = false;
 	bool nullMove = false;
+	int doubleExtensions = 0; // Double extensions on the path to this node
 };
 
 class Bot

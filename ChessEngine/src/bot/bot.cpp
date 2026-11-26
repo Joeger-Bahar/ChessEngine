@@ -664,6 +664,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 	// No TT cutoffs in PV nodes: they would cut the principal variation short. The probe still
 	// runs so the stored move can be searched first.
 	bool excluded = ss->excludedMove != 0;
+	ss->doubleExtensions = (ss - 1)->doubleExtensions;
 	int ttEval = NO_EVAL;
 	if (tt.ttProbe(key, depth, alpha, beta, ttScore, ttMove, &ttEval) && !pvNode && !excluded)
 		return ScoreFromTT(ttScore, ply);
@@ -826,7 +827,17 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		if (quitEarly) return alpha;
 
 		if (score < singularBeta)
+		{
 			singularExtension = 1; // No move comes close, extend the TT move
+
+			// Double extension, nothing comes near, so the TT move is forced
+			if (!pvNode && score < singularBeta - 20 && (ss - 1)->doubleExtensions < 6)
+				singularExtension = 2;
+			else if (singularBeta >= beta)
+				return singularBeta; // Multicut
+			else if (ScoreFromTT(ttEntry.score, ply) >= beta)
+				singularExtension = -1; // Negative extension, search shallower
+		}
 		else if (singularBeta >= beta)
 			return singularBeta; // Multicut. Without TT move, anothre move beats beta
 	}
@@ -925,6 +936,8 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		int newDepth = depth - 1 - iirReduction;
 		if (move == ttMove)
 			newDepth += singularExtension;
+		ss->doubleExtensions = (ss - 1)->doubleExtensions + (move == ttMove &&
+			singularExtension == 2 ? 1 : 0);
 
 		previousMoves[ply + 1] = move;
 
