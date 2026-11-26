@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <xmmintrin.h>
 
 #include "move.hpp"
 
@@ -35,6 +36,8 @@ struct TranspositionTable
     bool ttLookup(uint64_t key, TTEntry& out) const;
 
     inline size_t IndexFor(uint64_t key) const;
+
+    void Prefetch(uint64_t key) const { _mm_prefetch((const char*)&table[(size_t)(key & (entries - 1))], _MM_HINT_T0); }
 
     void Clear();
 

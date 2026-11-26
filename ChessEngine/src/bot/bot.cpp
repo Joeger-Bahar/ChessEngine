@@ -741,6 +741,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		ss->pieceIndex = -1;
 
 		engine->MakeNullMove();
+		tt.Prefetch(engine->GetZobristKey());
 		previousMoves[ply + 1] = Move();
 		int nullScore = -Search(depth - reduction, ply + 1, -beta, -beta + 1);
 		engine->UndoNullMove();
@@ -777,6 +778,8 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 				ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
 
 				engine->MakeMove(move);
+				tt.Prefetch(engine->GetZobristKey());
+
 				if (engine->InCheck(movingColor))
 				{
 					engine->UndoMove();
@@ -904,6 +907,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		ss->pieceIndex = PieceIndex(engine->GetBoard()[GetStart(move)].GetPiece());
 
 		engine->MakeMove(move);
+		tt.Prefetch(engine->GetZobristKey());
 
 		// Check for illegal moves
 		if (engine->InCheck(movingColor))
@@ -1166,6 +1170,7 @@ int Bot::Qsearch(int alpha, int beta, int ply, int qply)
 		}
 
 		engine->MakeMove(move);
+		tt.Prefetch(engine->GetZobristKey());
 
 		if (engine->InCheck(movingColor))
 		{
