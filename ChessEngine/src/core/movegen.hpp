@@ -18,6 +18,10 @@ public:
 	// This is pseudo-legal moves, it does not check for checks for faster engine calculations
 	static void GetAllMoves(std::vector<Move>& moves, Color color, const BitboardBoard& board, Engine* engine, bool onlyNoisy = false, bool onlyCaptures = false);
 	static std::vector<Move> GetAllMoves(Color color, const BitboardBoard& board, Engine* engine, bool onlyCaptures = false);
+	// Only the quiet moves
+	static void GetQuietMoves(std::vector<Move>& moves, Color color, const BitboardBoard& board);
+	// True is GetAllMoves would generate this move in this position
+	static bool IsPseudoLegal(Move move, Color color, const BitboardBoard& board);
 	static Bitboard GetPseudoAttacks(Pieces piece, int sq, const Bitboard& allOcc, bool isWhite);
 
 	// Slider attacks from sq for this occ. Gets directly from magic tables

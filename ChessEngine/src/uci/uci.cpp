@@ -17,11 +17,8 @@ Uci::Uci(Engine* engine, Bot* bot)
 void Uci::Loop()
 {
     std::string line;
-    while (std::getline(std::cin, line)) {
-        //uciLog << "<<< " << line << std::endl; // log incoming
-        //uciLog.flush(); // make sure it writes immediately
+    while (std::getline(std::cin, line))
         HandleCommand(line);
-    }
 }
 
 void Uci::HandleCommand(const std::string& line) 
@@ -39,9 +36,10 @@ void Uci::HandleCommand(const std::string& line)
         std::cout << "uciok" << std::endl;
     }
     else if (token == "isready")  std::cout << "readyok" << std::endl;
-    else if (token == "position") HandlePosition(iss);
+    else if (token == "position")  HandlePosition(iss);
     else if (token == "setoption") HandleSetOption(iss);
-    else if (token == "go")       HandleGo(iss);
+    else if (token == "go")        HandleGo(iss);
+    else if (token == "eval") std::cout << "eval " << Eval(Color::WHITE, engine) << std::endl;
     else if (token == "ucinewgame")
     {
         // Should probably clean this up

@@ -7,14 +7,8 @@
 
 #include <memory>
 
-// TODO: Sometimes using uint8_t for moves has very weird memory bugs, like setting the move col to 204 in GetAllMoves
-// 
-// TODO: Move extension (check, recapture, passed pawn, pv line)
-// TODO: Aspiration window
-// TODO: SEE for capture pruning (qsearch)
 // TODO: Pawn hash (for eval of pawn positions)
 // TODO: Asymmetric search
-// TODO: Keep track of pv line
 // 
 // Eval order:
 // Bishop
@@ -25,7 +19,6 @@
 // Pawn
 // King Safety
 // row col 0, 0 is a8
-// TODO: King is gone
 
 int main()
 {

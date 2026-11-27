@@ -227,9 +227,9 @@ void Bot::ScoreMoves(const std::vector<Move>& moves, int* scores, int ply, bool 
 			scores[i] = ttMoveScore;
 			continue;
 		}
-
+		
 		Piece moved = board[GetStart(move)].GetPiece();
-		Piece captured = board[GetEnd(move)].GetPiece();
+		Piece captured = IsEnPassant(move) ? Piece(Pieces::PAWN, Opponent(us)) : board[GetEnd(move)].GetPiece();
 		int promotion = GetPromotion(move);
 		int promotionBonus = promotion == (int)Pieces::NONE ? 0 : PieceValue(Piece((Pieces)promotion, moved.GetColor())) - PieceValue(Piece(Pieces::PAWN, moved.GetColor()));
 
@@ -312,6 +312,96 @@ void Bot::OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move fi
 	ScoreMoves(moves, scores, ply, onlyMVVLVA, firstMove);
 	PickMove(moves, scores, 0);
 	PickMove(moves, scores, 1);
+}
+
+// Is a killer or counter move worth trying
+bool Bot::IsRefutation(Move move, const MovePicker& mp)
+{
+	return move != mp.ttMove && Movegen::IsPseudoLegal(move, GameState::currentPlayer, engine->GetBitboardBoard())
+		&& !MoveIsCapture(move, engine->GetBitboardBoard()); // Capture here is in the capture list
+}
+
+Move Bot::NextMove(MovePicker& mp)
+{
+	Color us = GameState::currentPlayer;
+	const BitboardBoard& board = engine->GetBitboardBoard();
+	std::vector<Move>& captures = moveLists[mp.ply];
+	std::vector<Move>& quiets = quietLists[mp.ply];
+	int* captureScores = moveScores[mp.ply];
+	int* quietScores = quietMoveScores[mp.ply];
+
+	switch (mp.stage)
+	{
+	case Stage::TT_MOVE:
+		mp.stage = Stage::GEN_CAPTURES;
+		if (Movegen::IsPseudoLegal(mp.ttMove, us, board))
+			return mp.ttMove;
+		[[fallthrough]]; // Avoid compiler warning
+	case Stage::GEN_CAPTURES:
+		Movegen::GetAllMoves(captures, us, board, engine, true, true);
+		ScoreMoves(captures, captureScores, mp.ply, false, mp.ttMove);
+		mp.stage = Stage::GOOD_CAPTURES;
+		[[fallthrough]];
+	case Stage::GOOD_CAPTURES:
+		while (mp.captureIndex < captures.size())
+		{
+			PickMove(captures, captureScores, mp.captureIndex);
+			if (captureScores[mp.captureIndex] < 0)
+				break; // This one and the rest lose material by SEE so come after quiets
+			Move move = captures[mp.captureIndex++];
+			if (move != mp.ttMove)
+				return move;
+		}
+		mp.stage = Stage::KILLER1;
+		[[fallthrough]];
+	case Stage::KILLER1:
+		mp.stage = Stage::KILLER2;
+		if (!mp.skipQuiets && IsRefutation(mp.killer1, mp))
+			return mp.killer1;
+		[[fallthrough]];
+	case Stage::KILLER2:
+		mp.stage = Stage::COUNTER;
+		if (!mp.skipQuiets && IsRefutation(mp.killer2, mp))
+			return mp.killer2;
+		[[fallthrough]];
+	case Stage::COUNTER:
+		mp.stage = Stage::GEN_QUIETS;
+		if (!mp.skipQuiets && mp.counter != mp.killer1 && mp.counter != mp.killer2 && IsRefutation(mp.counter, mp))
+			return mp.counter;
+		[[fallthrough]];
+	case Stage::GEN_QUIETS:
+		if (!mp.skipQuiets)
+		{
+			Movegen::GetQuietMoves(quiets, us, board);
+			ScoreMoves(quiets, quietScores, mp.ply, false, mp.ttMove);
+		}
+		mp.stage = Stage::QUIETS;
+		[[fallthrough]];
+	case Stage::QUIETS:
+		while (!mp.skipQuiets && mp.quietIndex < quiets.size())
+		{
+			PickMove(quiets, quietScores, mp.quietIndex);
+			Move move = quiets[mp.quietIndex++];
+			// Skip the move if the earlier stages returned it
+			if (move != mp.ttMove && move != mp.killer1 && move != mp.killer2 && move != mp.counter)
+				return move;
+		}
+		mp.stage = Stage::BAD_CAPTURES;
+		[[fallthrough]];
+	case Stage::BAD_CAPTURES:
+		while (mp.captureIndex < captures.size())
+		{
+			PickMove(captures, captureScores, mp.captureIndex);
+			Move move = captures[mp.captureIndex++];
+			if (move != mp.ttMove)
+				return move;
+		}
+		mp.stage = Stage::DONE;
+		[[fallthrough]];
+	case Stage::DONE:
+		break;
+	}
+	return Move();
 }
 
 int& Bot::CaptureHistoryEntry(Move move)
@@ -910,12 +1000,14 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			singularExtension = -1; // Negative extension, search shallower
 	}
 
-	// Pseudo legal
-	std::vector<Move>& moves = moveLists[ply];
-	Movegen::GetAllMoves(moves, movingColor, engine->GetBitboardBoard(), engine);
-
-	int* scores = moveScores[ply];
-	ScoreMoves(moves, scores, ply, false, ttMove); // Tt move gets top score
+	// Moves come from the staged move generation
+	MovePicker mp;
+	mp.ply = ply;
+	mp.ttMove = ttMove;
+	mp.killer1 = killerMoves[ply][0];
+	mp.killer2 = killerMoves[ply][1];
+	if (ply > 0 && !MoveIsNull(previousMoves[ply]))
+		mp.counter = counterMoves[(int)movingColor][GetStart(previousMoves[ply])][GetEnd(previousMoves[ply])];
 
 	int originalAlpha = alpha;
 	uint32_t bestMove32 = 0;
@@ -936,14 +1028,10 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 
 	// For lmp
 	int lmpLimit = (3 + depth * depth) / (improving ? 1 : 2);
-	bool skipQuiets = false;
 
 	// Loop through moves
-	for (size_t moveIndex = 0; moveIndex < moves.size(); ++moveIndex)
+	for (Move move = NextMove(mp); !MoveIsNull(move); move = NextMove(mp))
 	{
-		PickMove(moves, scores, moveIndex);
-		const Move move = moves[moveIndex];
-
 		// Skip excluded move
 		if (move == ss->excludedMove)
 			continue;
@@ -955,8 +1043,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 		// Late move pruning
 		if (!pvNode && !inCheck && isQuiet && bestEval > -(MATE_VAL - MAX_PLY) && !engine->GivesCheck(move))
 		{
-			if (skipQuiets) continue;
-			if (depth <= 8 && moveCount >= lmpLimit) { skipQuiets = true; continue; }
+			if (depth <= 8 && moveCount >= lmpLimit) { mp.skipQuiets = true; continue; }
 
 			// Futility pruning: even a good quiet move can't lift the static eval up to alpha
 			int lmrDepth = std::max(0, depth - 1 - lmrTable[std::min(depth, 63)][std::min(moveCount + 1, 63)]);
@@ -964,7 +1051,7 @@ int Bot::Search(int depth, int ply, int alpha, int beta)
 			if (lmrDepth <= 6 && futilityValue <= alpha)
 			{
 				bestEval = std::max(bestEval, futilityValue);
-				skipQuiets = true;
+				mp.skipQuiets = true;
 				continue;
 			}
 

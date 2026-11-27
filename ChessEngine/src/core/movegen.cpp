@@ -273,8 +273,23 @@ void Movegen::GetAllMoves(std::vector<Move>& moves, Color color, const BitboardB
 			case Pieces::BISHOP: pieceMoves = SlidingMoves(sq, color, Pieces::BISHOP, board); break;
 			case Pieces::ROOK:   pieceMoves = SlidingMoves(sq, color, Pieces::ROOK, board); break;
 			case Pieces::QUEEN:  pieceMoves = SlidingMoves(sq, color, Pieces::QUEEN, board); break;
-			case Pieces::KING:   pieceMoves = KingMoves(sq, color, board); break;
+			case Pieces::KING:   pieceMoves = (onlyNoisy && onlyCaptures) ? kingAttacks[sq] & board.allPieces[1 - c] : KingMoves(sq, color, board); break;
 			default: break;
+			}
+
+			// Drop empty move squares. Enpassant and promotion go to empty square so keep
+			if (onlyNoisy && onlyCaptures)
+			{
+				Bitboard keep = board.allPieces[1 - c];
+				// Pawn stuff
+				if (type == Pieces::PAWN)
+				{
+					keep |= 0xFF000000000000FFULL; // Rows 0 and 7
+					if (GameState::enPassantTarget != -1)
+						Set(keep, GameState::enPassantTarget);
+				}
+
+				pieceMoves &= keep;
 			}
 
 			Bitboard pm = pieceMoves;
@@ -322,6 +337,80 @@ void Movegen::GetAllMoves(std::vector<Move>& moves, Color color, const BitboardB
 			}
 		}
 	}
+}
+
+void Movegen::GetQuietMoves(std::vector<Move>& moves, Color color, const BitboardBoard& board)
+{
+	moves.clear();
+	int c = IsWhite(color) ? 0 : 1;
+
+	for (int t = 0; t < 6; ++t)
+	{
+		Bitboard bb = board.pieceBitboards[c][t];
+		while (bb)
+		{
+			int sq = PopLSB(bb);
+			Pieces type = (Pieces)(t + 1);
+
+			Bitboard targets = EMPTY_BITBOARD;
+			switch (type)
+			{
+			case Pieces::PAWN: targets = PawnMoves(sq, color, board); break;
+			case Pieces::KNIGHT: targets = KnightMoves(sq, color, board); break;
+			case Pieces::KING: targets = KingMoves(sq, color, board); break;
+			default: targets = SlidingMoves(sq, color, type, board); break;
+			}
+			targets &= ~board.occupied; // Only empty squares
+
+			while (targets)
+			{
+				int endSq = PopLSB(targets);
+
+				// En passant and promotion land on empty squares but are noisy
+				if (type == Pieces::PAWN && (ToCol(sq) != ToCol(endSq) || ToRow(endSq) == 0 || ToRow(endSq) == 7))
+					continue;
+
+				bool isCastle = (type == Pieces::KING && std::abs(endSq - sq) == 2);
+				moves.push_back(EncodeMove(sq, endSq, (int)Pieces::NONE, false, isCastle));
+			}
+		}
+	}
+}
+
+bool Movegen::IsPseudoLegal(Move move, Color color, const BitboardBoard& board)
+{
+	int from = GetStart(move);
+	int to = GetEnd(move);
+	int c = IsWhite(color) ? 0 : 1;
+
+	if (!IsSet(board.allPieces[c], from))
+		return false;
+	int t = 0;
+	while (!IsSet(board.pieceBitboards[c][t], from))
+		++t;
+	Pieces type = (Pieces)(t + 1);
+
+	Bitboard targets = EMPTY_BITBOARD;
+	switch (type)
+	{
+	case Pieces::PAWN:   targets = PawnMoves(from, color, board); break;
+	case Pieces::KNIGHT: targets = KnightMoves(from, color, board); break;
+	case Pieces::KING:   targets = KingMoves(from, color, board); break;
+	default:             targets = SlidingMoves(from, color, type, board); break;
+	}
+	if (!IsSet(targets, to))
+		return false;
+
+	// A pawn reaching the last row has to promote
+	int promotion = GetPromotion(move);
+	bool promotes = (type == Pieces::PAWN && (ToRow(to) == 0 || ToRow(to) == 7));
+	if (promotes ? (promotion < (int)Pieces::KNIGHT || promotion > (int)Pieces::QUEEN) : promotion != (int)Pieces::NONE)
+		return false;
+
+	// The flags have to be the ones GetAllMoves would give
+	bool isCastle = (type == Pieces::KING && std::abs(to - from) == 2);
+	bool isEnPassant = (type == Pieces::PAWN && ToCol(from) != ToCol(to) && !IsSet(board.occupied, to));
+	return move == EncodeMove(from, to, promotion, isEnPassant, isCastle);
 }
 
 std::vector<Move> Movegen::GetAllMoves(Color color, const BitboardBoard& board, Engine* engine, bool onlyCaptures)

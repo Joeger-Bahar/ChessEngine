@@ -29,6 +29,25 @@ struct SearchStackEntry
 	int doubleExtensions = 0; // Double extensions on the path to this node
 };
 
+enum class Stage : uint8_t
+{
+	TT_MOVE, GEN_CAPTURES, GOOD_CAPTURES, KILLER1, KILLER2, COUNTER,
+	GEN_QUIETS, QUIETS, BAD_CAPTURES, DONE
+};
+
+struct MovePicker
+{
+	Stage stage = Stage::TT_MOVE;
+	int ply = 0;
+	Move ttMove = Move();
+	Move killer1 = Move();
+	Move killer2 = Move();
+	Move counter = Move();
+	size_t captureIndex = 0; // Next move in moveLists[ply]
+	size_t quietIndex = 0; // Next move in quietLists[ply]
+	bool skipQuiets = false; // Set by LMP. No more quiet moves
+};
+
 class Bot
 {
 public:
@@ -58,6 +77,9 @@ private:
 	int Qsearch(int alpha, int beta, int ply, int qply = 0);
 	void ScoreMoves(const std::vector<Move>& moves, int* scores, int ply, bool onlyMVVLVA, Move ttMove = Move());
 	void OrderMoves(std::vector<Move>& moves, int ply, bool onlyMVVLVA, Move firstMove = Move());
+	// Next move of the staged move gen
+	Move NextMove(MovePicker& mp);
+	bool IsRefutation(Move move, const MovePicker& mp);
 
 	// UCI output
 	void PrintInfo(int depth, int score, Move rootMove);
@@ -71,11 +93,13 @@ private:
 	
 	// Continuation history
 	std::vector<int16_t> contHistory;
-	std::vector<Move> moveLists[MAX_PLY];
+	std::vector<Move> moveLists[MAX_PLY]; // Has capture/noisy moves
 	std::vector<Move> qMoveLists[MAX_PLY];
 	int moveScores[MAX_PLY][MAX_MOVES];  // Scores for moveLists[ply]
 	int qMoveScores[MAX_PLY][MAX_MOVES]; // Scores for qMoveLists[ply
 	std::vector<Move> probCutLists[MAX_PLY];
+	std::vector<Move> quietLists[MAX_PLY]; // Quiet moves for the search
+	int quietMoveScores[MAX_PLY][MAX_MOVES]; // Scores
 
 	SearchStackEntry searchStack[MAX_PLY + 8];
 	Move previousMoves[MAX_PLY] = {};
