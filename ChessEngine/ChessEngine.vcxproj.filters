@@ -236,5 +236,8 @@
     <ClInclude Include="include\Fathom\src\tbprobe.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\core\evalParams.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
