@@ -168,9 +168,128 @@ struct EvalInfo
 	S score[2];
 };
 
-inline Bitboard Attacked(const EvalInfo& ei, int c, int type) { return ei.attacked[c][1 + type]; }
-inline Bitboard PiecesOf(const EvalInfo& ei, int c, int type) { return ei.board->pieceBitboards[c][type]; }
-inline int TypeOn(const EvalInfo& ei, int sq) { return (int)ei.mailbox[sq].GetPiece().GetType() - 1; }
+// Cache for the pawn structure. One per thread
+struct PawnEntry
+{
+	Bitboard pawns[2];
+	S score[2];
+	Bitboard passed[2];
+	Bitboard span[2];
+};
+
+constexpr int PAWN_TABLE_BITS = 13;
+thread_local PawnEntry pawnTable[1 << PAWN_TABLE_BITS];
+
+inline Bitboard Attacked(const EvalInfo& info, int c, int type) { return info.attacked[c][1 + type]; }
+inline Bitboard PiecesOf(const EvalInfo& info, int c, int type) { return info.board->pieceBitboards[c][type]; }
+inline int TypeOn(const EvalInfo& info, int sq) { return (int)info.mailbox[sq].GetPiece().GetType() - 1; }
+
+S EvalPawns(EvalInfo& info, int us)
+{
+	const int them = us ^ 1;
+	S score;
+	info.passed[us] = 0;
+	info.pawnAttackSpan[us] = 0;
+
+	Bitboard ours = info.pawns[us];
+	Bitboard theirs = info.pawns[them];
+	Bitboard b = ours;
+	while (b)
+	{
+		int sq = PopLSB(b);
+		int r = RelRank(us, sq);
+		int f = Col(sq);
+		Bitboard stopSq = Up(us, 1ULL << sq);
+		info.pawnAttackSpan[us] |= T.pawnAttackSpan[us][sq];
+		bool opposed = (theirs & T.forwardFile[us][sq]) != 0;
+
+		Bitboard neighbours = ours & T.adjacentFiles[f];
+		Bitboard phalanx = neighbours & RowBB(Row(sq));
+		Bitboard support = ours & Movegen::GetPawnAttacks()[them][sq]; // Our defending pawns
+		bool doubled = (ours & T.forwardFile[us][sq]) != 0;
+		bool passed = !(theirs & T.passedMask[us][sq]) && !doubled;
+
+		// Backward pawn. No pawn of ours beside or behind and its stop square
+		// is controlled or blocked by an enemy pawn
+		bool backward = !(neighbours & ~T.forwardRanks[us][sq]) && ((PawnAttakcksBB(them, theirs) | theirs) & stopSq);
+
+		if (phalanx) score += Phalanx[r];
+		if (support) score += Supported[r];
+
+		if (!neighbours) score += Isolated;
+		else if (backward) score += Backward;
+
+		// Isolated or backward on a half open file is easy target for rooks
+		if (!opposed && (!neighbours || backward))
+			score += WeakUnopposed;
+
+		// Blocked by enemy pawn
+		if (theirs & stopSq) score += BlockedPawn[r];
+
+		if (doubled) score += Doubled;
+
+		if (passed)
+		{
+			info.passed[us] |= 1ULL << sq;
+			score += PassedRank[r];
+		}
+	}
+	return score;
+}
+
+// Endgame scale factor (64 is normal). Drawish material gets its endgame score scaled down
+int ScaleFactor(const EvalInfo& info, int egScore)
+{
+	int strong = egScore >= 0 ? WHITE : BLACK;
+	int weak = strong ^ 1;
+	auto npm = [&](int c)
+	{
+		return 320 * Count(PiecesOf(info, c, KNIGHT)) + 330 * Count(PiecesOf(info, c, BISHOP))
+			+ 500 * Count(PiecesOf(info, c, ROOK)) + 900 * Count(PiecesOf(info, c, QUEEN));
+	};
+	int npmStrong = npm(strong);
+	int npmWeak = npm(weak);
+	int strongPawns = Count(info.pawns[strong]);
+
+	// No pawns and at most a minor piece ahead is hard or impossible to win
+	if (!strongPawns && npmStrong - npmWeak <= 330)
+		return npmStrong < 500 ? 0 : (npmWeak <= 330 ? 4 : 14);
+	// Can't get mate with 2 knights
+	if (!strongPawns && npmStrong == 640 && Count(PiecesOf(info, strong, KNIGHT)) == 2)
+		return 0;
+	// One pawn and a minor piece ahead
+	if (strongPawns == 1 && npmStrong - npmWeak <= 330)
+		return 48;
+
+	// Opposite colored bishops
+	Bitboard wb = PiecesOf(info, WHITE, BISHOP);
+	Bitboard bb = PiecesOf(info, BLACK, BISHOP);
+	if (Count(wb) == 1 && Count(bb) == 1 && (bool(wb & LightSquares) != bool(bb & LightSquares)))
+	{
+		if (npm(WHITE) == 330 && npm(BLACK) == 330)
+			return 18 + 4 * Count(info.passed[strong]);
+		return 22 + 4 * Count(info.pieces[strong]);
+	}
+
+	// Rook endgame where the strong side's extra pawn is on a flank
+	// and the weak king guards its pawns
+	if (npm(WHITE) == 500 && npm(BLACK) == 500
+		&& strongPawns - Count(info.pawns[weak]) <= 1
+		&& bool(KingSide & info.pawns[strong]) != bool(QueenSide & info.pawns[strong])
+		&& (Movegen::GetKingAttacks()[info.kingSq[weak]] & info.pawns[weak]))
+		return 36;
+
+	// Only one queen on the board so the side without it can hold with enough minor pieces
+	Bitboard queens = PiecesOf(info, WHITE, QUEEN) | PiecesOf(info, BLACK, QUEEN);
+	if (Count(queens) == 1)
+	{
+		int other = (PiecesOf(info, WHITE, QUEEN) ? BLACK : WHITE);
+		return 37 + 3 * (Count(PiecesOf(info, other, BISHOP)) + Count(PiecesOf(info, other, KNIGHT)));
+	}
+
+	// Fewer pawns = more drawish
+	return std::min(64, 36 + 7 * strongPawns);
+}
 
 
 int Eval(Color player, const Engine* engine)
@@ -212,12 +331,47 @@ int Eval(Color player, const Engine* engine)
 	}
 	phase = std::min(phase, 24);
 
+	// Pawn structure depends on the pawns so get it from cache if possible
+	uint64_t hash = (info.pawns[WHITE] ^ (info.pawns[BLACK] * 0x9E3779B97F4A7C15ULL)) * 0xD6E8FEB86659FD93ULL;
+	PawnEntry& entry = pawnTable[hash >> (64 - PAWN_TABLE_BITS)];
+	// Update if outdated
+	if (entry.pawns[WHITE] != info.pawns[WHITE] || entry.pawns[BLACK] != info.pawns[BLACK])
+	{
+		entry.pawns[WHITE] = info.pawns[WHITE];
+		entry.pawns[BLACK] = info.pawns[BLACK];
+		for (int us = 0; us < 2; ++us)
+		{
+			entry.score[us] = EvalPawns(info, us);
+			entry.passed[us] = info.passed[us];
+			entry.span[us] = info.pawnAttackSpan[us];
+		}
+	}
+	// Get actual cached values
+	for (int us = 0; us < 2; ++us)
+	{
+		info.score[us] += entry.score[us];
+		info.passed[us] = entry.passed[us];
+		info.pawnAttackSpan[us] = entry.span[us];
+	}
+
+	// Material combinations
+	for (int us = 0; us < 2; ++us)
+	{
+		if (Count(board.pieceBitboards[us][BISHOP]) >= 2) info.score[us] += BishopPair;
+		int pawnCount = Count(info.pawns[us]);
+		int n = Count(board.pieceBitboards[us][KNIGHT]) * pawnCount;
+		info.score[us] += KnightPawns * n;
+
+		n = Count(board.pieceBitboards[us][ROOK]) * pawnCount;
+		info.score[us] += RookPawns * n;
+	}
+
 	// Small bonus for STM
 	info.score[IsWhite(GameState::currentPlayer) ? WHITE : BLACK] += Tempo;
 
 	S total = info.score[WHITE] - info.score[BLACK];
 
-	int scale = 64;
+	int scale = ScaleFactor(info, total.eg);
 	// Blend middle and end game by phase
 	int finalEval = (total.mg * phase + total.eg * (24 - phase) * scale / 64) / 24;
 	return player == Color::WHITE ? finalEval : -finalEval;
