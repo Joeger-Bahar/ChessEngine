@@ -45,7 +45,7 @@ constexpr Bitboard RelRankBB(int c, int r) { return RowBB(c == WHITE ? 7 - r : r
 constexpr Bitboard Up(int c, Bitboard b) { return c == WHITE ? b >> 8 : b << 8; }
 constexpr Bitboard Down(int c, Bitboard b) { return c == WHITE ? b << 8 : b >> 8; }
 
-constexpr Bitboard PawnAttakcksBB(int c, Bitboard p)
+constexpr Bitboard PawnAttacksBB(int c, Bitboard p)
 {
 	return c == WHITE ? ((p & ~FileABB) >> 9) | ((p & ~FileHBB) >> 7)
 		: ((p & ~FileABB) << 7) | ((p & ~FileHBB) << 9);
@@ -156,6 +156,7 @@ struct EvalInfo
 	Bitboard pieces[2]; // All pieces of a color
 	int kingSq[2];
 	Bitboard attacked[2][7]; // [color][0] = by anything, [1 + type] = that piece type
+	Bitboard attacked2[2]; // Attacked at least twice
 	Bitboard mobilityArea[2];
 	Bitboard kingRing[2];
 	Bitboard pawnAttackSpan[2]; // Every square the color's pawns could ever attack
@@ -211,7 +212,7 @@ S EvalPawns(EvalInfo& info, int us)
 
 		// Backward pawn. No pawn of ours beside or behind and its stop square
 		// is controlled or blocked by an enemy pawn
-		bool backward = !(neighbours & ~T.forwardRanks[us][sq]) && ((PawnAttakcksBB(them, theirs) | theirs) & stopSq);
+		bool backward = !(neighbours & ~T.forwardRanks[us][sq]) && ((PawnAttacksBB(them, theirs) | theirs) & stopSq);
 
 		if (phalanx) score += Phalanx[r];
 		if (support) score += Supported[r];
@@ -268,7 +269,7 @@ int ScaleFactor(const EvalInfo& info, int egScore)
 	{
 		if (npm(WHITE) == 330 && npm(BLACK) == 330)
 			return 18 + 4 * Count(info.passed[strong]);
-		return 22 + 4 * Count(info.pieces[strong]);
+		return 22 + 3 * Count(info.pieces[strong]);
 	}
 
 	// Rook endgame where the strong side's extra pawn is on a flank
@@ -289,6 +290,146 @@ int ScaleFactor(const EvalInfo& info, int egScore)
 
 	// Fewer pawns = more drawish
 	return std::min(64, 36 + 7 * strongPawns);
+}
+
+void Init(EvalInfo& info, int us)
+{
+	const int them = us ^ 1;
+	const Bitboard occ = info.board->occupied;
+
+	Bitboard pawnAttacks = PawnAttacksBB(us, info.pawns[us]);
+	Bitboard kingAttacks = Movegen::GetKingAttacks()[info.kingSq[us]];
+	for (int i = 0; i < 7; ++i)
+		info.attacked[us][i] = 0;
+	info.attacked[us][1 + PAWN] = pawnAttacks;
+	info.attacked[us][1 + KING] = kingAttacks;
+	info.attacked[us][0] = pawnAttacks | kingAttacks;
+	info.attacked2[us] = (pawnAttacks & kingAttacks) | PawnDoubleAttacksBB(us, info.pawns[us]);
+
+	// Mobility counts squares that are worth going to
+	Bitboard lowRanks = RelRankBB(us, 1) | RelRankBB(us, 2);
+	Bitboard stuckPawns = info.pawns[us] & (Down(us, occ) | lowRanks);
+
+	// Pieces pinned to the king can only move along the pin
+
+	int ks = info.kingSq[us];
+	Bitboard snipers = (T.rookRays[ks] & (PiecesOf(info, them, ROOK) | PiecesOf(info, them, QUEEN)))
+		| (T.bishopRays[ks] & (PiecesOf(info, them, BISHOP) | PiecesOf(info, them, QUEEN)));
+	info.pinned[us] = 0;
+	while (snipers)
+	{
+		Bitboard b = T.between[ks][PopLSB(snipers)] & occ;
+		if (b && !(b & (b - 1)) && (b & info.pieces[us]))
+			info.pinned[us] |= b;
+	}
+
+	info.mobilityArea[us] = ~(stuckPawns |
+		PiecesOf(info, us, KING) | PiecesOf(info, us, QUEEN) |
+		info.pinned[us] | PawnAttacksBB(them, info.pawns[them]));
+}
+
+S EvalPieces(EvalInfo& info, int us)
+{
+	const int them = us ^ 1;
+	const BitboardBoard& board = *info.board;
+	const Bitboard occ = board.occupied;
+	const Bitboard queens = PiecesOf(info, WHITE, QUEEN) | PiecesOf(info, BLACK, QUEEN);
+	const Bitboard allPawns = info.pawns[WHITE] | info.pawns[BLACK];
+	S score;
+
+	// Outposts
+	Bitboard outpostRanks = RelRankBB(us, 3) | RelRankBB(us, 4) | RelRankBB(us, 5);
+	Bitboard outposts = outpostRanks & Attacked(info, us, PAWN) & ~info.pawnAttackSpan[them];
+
+	for (int type = KNIGHT; type <= QUEEN; ++type)
+	{
+		Bitboard b = PiecesOf(info, us, type);
+		while (b)
+		{
+			int sq = PopLSB(b);
+			Bitboard sqBB = 1ULL << sq;
+
+			Bitboard att;
+			if (type == KNIGHT) att = Movegen::GetKnightAttacks()[sq];
+			else if (type == BISHOP) att = Movegen::BishopAttacks(sq, occ ^ queens); // Sees through queens
+			else if (type == ROOK) att = Movegen::RookAttacks(sq, occ ^ queens ^ PiecesOf(info, us, ROOK));
+			else att = Movegen::RookAttacks(sq, occ) | Movegen::BishopAttacks(sq, occ);
+
+			if (info.pinned[us] & sqBB)
+				att &= T.line[info.kingSq[us]][sq];
+
+			info.attacked2[us] |= info.attacked[us][0] & att;
+			info.attacked[us][1 + type] |= att;
+			info.attacked[us][0] |= att;
+
+			int mobility = Count(att & info.mobilityArea[us]);
+			if (type == KNIGHT || type == BISHOP)
+			{
+				if (type == KNIGHT) score += MobilityKnight[mobility];
+				else score += MobilityBishop[mobility];
+
+				if (sqBB & outposts)
+				{
+					if (type == KNIGHT) score += KnightOutpost;
+					else score += BishopOutpost;
+				}
+				else if (type == KNIGHT && (att & outposts & ~info.pieces[us]))
+					score += ReachableOutpost;
+
+				// Shielded by a pawn right in front of it
+				if (Down(us, allPawns) & sqBB)
+					score += MinorBehindPawn;
+
+				int kingDist = T.distance[sq][info.kingSq[us]];
+				if (type == KNIGHT) score += KnightKingDistance * kingDist;
+				else score += BishopKingDistance * kingDist;
+
+				if (type == BISHOP)
+				{
+					// Our pawns on the bishops color = bad
+					Bitboard sameColor = (sqBB & LightSquares) ? LightSquares : ~LightSquares;
+					int n = Count(info.pawns[us] & sameColor);
+					score += BishopPawns * n;
+
+					// Controls both center squares of a long diagonal
+					if (Count(Movegen::BishopAttacks(sq, allPawns) & Center) > 1)
+					{
+						score += BishopLongDiagonal;
+					}
+				}
+			}
+			else if (type == ROOK)
+			{
+				score += MobilityRook[mobility];
+				Bitboard file = FileBB(Col(sq));
+				if (!(info.pawns[us] & file))
+				{
+					if (!(info.pawns[them] & file)) score += RookOpenFile;
+					else score += RookSemiOpenFile;
+				}
+				if (file & queens) score += RookOnQueenFile;
+
+				// Shut in by own king, which can't castle
+				if (mobility <= 3)
+				{
+					int kingFile = Col(info.kingSq[us]);
+					if ((kingFile < 4) == (Col(sq) < kingFile))
+					{
+						bool canCastle = us == WHITE
+							? (GameState::whiteCastlingRights[0] || GameState::whiteCastlingRights[1])
+							: (GameState::blackCastlingRights[0] || GameState::blackCastlingRights[1]);
+						int n = canCastle ? 1 : 2;
+						score += TrappedRook * n;
+					}
+				}
+			}
+			else
+			{
+				score += MobilityQueen[mobility];
+			}
+		}
+	}
+	return score;
 }
 
 
@@ -365,6 +506,11 @@ int Eval(Color player, const Engine* engine)
 		n = Count(board.pieceBitboards[us][ROOK]) * pawnCount;
 		info.score[us] += RookPawns * n;
 	}
+
+	Init(info, WHITE);
+	Init(info, BLACK);
+	for (int c = 0; c < 2; ++c)
+		info.score[c] += EvalPieces(info, c);
 
 	// Small bonus for STM
 	info.score[IsWhite(GameState::currentPlayer) ? WHITE : BLACK] += Tempo;
